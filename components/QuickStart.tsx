@@ -1,11 +1,12 @@
 "use client";
 
-import { parseBornText } from "@/lib/validate";
-import type { QuickInput } from "@/lib/agent/care";
+import { parseBirth, parseBornText } from "@/lib/validate";
+import { eraFor, type QuickInput } from "@/lib/agent/care";
+import TuningDial from "./TuningDial";
 
 export const COUNTRIES = ["United Kingdom", "United States", "Ireland", "Canada", "Australia", "New Zealand"];
 
-/** Four boxes and one button. Only "Born" and "One thing they loved" are needed for a useful plan. */
+/** The dial, two boxes that matter and two that help, then one button. */
 export default function QuickStart({
   value,
   country,
@@ -23,16 +24,25 @@ export default function QuickStart({
 }) {
   const set = (patch: Partial<QuickInput>) => onChange({ ...value, ...patch });
   const born = parseBornText(value.born);
+  let year: { year: number; approx: boolean } | null = null;
+  try {
+    year = born ? parseBirth(born) : null;
+  } catch {
+    year = null;
+  }
+  const bad = !!value.born.trim() && !year;
   const bornHint = !value.born.trim()
     ? "A year, a decade or their age"
-    : !born
-      ? "Try 1946, 1940s or age 82"
-      : born.birthYear
+    : bad
+      ? "Try a year like 1946, a decade like 1940s, or an age like 82"
+      : born?.birthYear
         ? `Born ${born.birthYear}`
-        : born.birthDecade
+        : born?.birthDecade
           ? `Born in the ${born.birthDecade}`
-          : `About ${born.age}, so born around ${new Date().getFullYear() - (born.age || 0)}`;
-  const ready = !!born && !!value.loved.trim();
+          : `About ${born?.age}, so born around ${year?.year}`;
+  const ready = !!year && !!value.loved.trim();
+  const era = year ? eraFor(year.year) : null;
+  const who = value.firstName.trim() || "They";
 
   return (
     <form
@@ -42,56 +52,72 @@ export default function QuickStart({
         if (ready && !busy) onSubmit();
       }}
     >
-      <div className="quick-grid">
-        <label>
-          <span>
-            First name <em className="opt">optional</em>
-          </span>
-          <input value={value.firstName} onChange={(e) => set({ firstName: e.target.value })} placeholder="Margaret" autoComplete="off" />
-        </label>
-        <label>
-          <span>Born</span>
-          <input
-            value={value.born}
-            onChange={(e) => set({ born: e.target.value })}
-            placeholder="1946, 1940s or age 82"
-            inputMode="text"
-            autoComplete="off"
-            aria-describedby="born-hint"
-            aria-invalid={!!value.born.trim() && !born}
-          />
-          <small id="born-hint" className={value.born.trim() && !born ? "hint bad" : "hint"}>
-            {bornHint}
-          </small>
-        </label>
-        <label>
-          <span>
-            Where they grew up <em className="opt">optional</em>
-          </span>
-          <input value={value.place} onChange={(e) => set({ place: e.target.value })} placeholder="Town or city" autoComplete="off" />
-          <small className="hint country-line">
-            in{" "}
-            <select aria-label="Country they grew up in" value={country} onChange={(e) => onCountry(e.target.value)}>
-              {COUNTRIES.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-          </small>
-        </label>
-        <label className="wide">
-          <span>One thing they loved</span>
-          <input
-            value={value.loved}
-            onChange={(e) => set({ loved: e.target.value })}
-            placeholder="A singer, film, TV show, food or pastime: e.g. Elvis, Coronation Street, ballroom dancing"
-            autoComplete="off"
-          />
-          <small className="hint">Anything at all. Memory Lane works out whether it&apos;s music, film, TV, food or a hobby.</small>
-        </label>
+      <TuningDial
+        rows={year && era ? [{ birthYear: year.year, start: era.formativeStart, end: era.formativeEnd, approx: year.approx }] : []}
+        idle="Type when they were born and the dial finds the years they remember best."
+        caption={
+          year && era ? (
+            <>
+              {who === "They" ? "Their" : `${who}’s`} memory years: <strong>{era.formativeStart} to {era.formativeEnd}</strong>, from age 10 to 25.
+            </>
+          ) : undefined
+        }
+      />
+      <div className="quick-body">
+        <div className="quick-grid">
+          <label className="field">
+            <span className="field-label">Born</span>
+            <input
+              value={value.born}
+              onChange={(e) => set({ born: e.target.value })}
+              placeholder="1946, 1940s or age 82"
+              inputMode="text"
+              autoComplete="off"
+              aria-describedby="born-hint"
+              aria-invalid={bad}
+            />
+            <small id="born-hint" className={bad ? "hint bad" : "hint"}>
+              {bornHint}
+            </small>
+          </label>
+          <label className="field">
+            <span className="field-label">One thing they loved</span>
+            <input
+              value={value.loved}
+              onChange={(e) => set({ loved: e.target.value })}
+              placeholder="Elvis, Coronation Street, ballroom dancing…"
+              autoComplete="off"
+              aria-describedby="loved-hint"
+            />
+            <small id="loved-hint" className="hint">
+              A singer, film, TV show, food or pastime. We’ll work out which.
+            </small>
+          </label>
+          <label className="field">
+            <span className="field-label">
+              First name <span className="opt">(optional)</span>
+            </span>
+            <input value={value.firstName} onChange={(e) => set({ firstName: e.target.value })} placeholder="Margaret" autoComplete="off" />
+          </label>
+          <div className="field">
+            <label className="field-label" htmlFor="qs-place">
+              Where they grew up <span className="opt">(optional)</span>
+            </label>
+            <div className="place-pair">
+              <input id="qs-place" value={value.place} onChange={(e) => set({ place: e.target.value })} placeholder="Town or city" autoComplete="off" />
+              <select aria-label="Country they grew up in" value={country} onChange={(e) => onCountry(e.target.value)}>
+                {COUNTRIES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+        <button type="submit" className="btn btn-primary btn-big" disabled={!ready || busy} aria-busy={busy}>
+          {busy ? "Making the plan…" : "Make a week’s plan"}
+        </button>
+        {!ready && !busy && <p className="hint ready-hint">Fill in when they were born and one thing they loved to make a plan.</p>}
       </div>
-      <button type="submit" className="btn btn-primary btn-big" disabled={!ready || busy}>
-        {busy ? "Making the plan…" : "Make a plan"}
-      </button>
     </form>
   );
 }

@@ -9,6 +9,10 @@ import { QUICK_SAMPLES, SAMPLE_RESIDENTS, type QuickInput } from "@/lib/agent/ca
 import { parseBirth, parseBornText, splitPlace } from "@/lib/validate";
 import type { ResidentProfile, WeekPlan } from "@/lib/types";
 
+/** Smooth scrolling only for people who have not asked for reduced motion. */
+const scrollBehaviour = (): ScrollBehavior =>
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+
 const EMPTY_QUICK: QuickInput = { firstName: "", born: "", place: "", loved: "" };
 
 /** Turn the Quick start boxes (plus anything added via "sharpen") into the /api/plan request body. */
@@ -63,11 +67,11 @@ export default function Home() {
         body: JSON.stringify({ resident: body }),
       });
       const out = await res.json();
-      if (!res.ok) throw new Error(out.error || "Something went wrong.");
+      if (!res.ok) throw new Error(out.error || "The plan could not be made. Check the details above and try again.");
       const firstPlan = !plan;
       setPlan(out);
       setLastSent(sent);
-      if (firstPlan) setTimeout(() => document.getElementById("plan")?.scrollIntoView({ behavior: "smooth" }), 50);
+      if (firstPlan) setTimeout(() => document.getElementById("plan")?.scrollIntoView({ behavior: scrollBehaviour() }), 50);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -98,7 +102,7 @@ export default function Home() {
       setResident(next);
     }
     setView("full");
-    setTimeout(() => document.getElementById("full-form")?.scrollIntoView({ behavior: "smooth" }), 50);
+    setTimeout(() => document.getElementById("full-form")?.scrollIntoView({ behavior: scrollBehaviour() }), 50);
   }
 
   function backToQuick() {
@@ -115,55 +119,39 @@ export default function Home() {
 
   return (
     <>
-      <section className="intro no-print">
-        <h1>A week of moments that feel like home</h1>
+      <section className="intro no-print" aria-labelledby="intro-h">
+        <h1 id="intro-h">Tune in to the years they remember.</h1>
         <p className="lead">
-          When they were born, where they grew up and one thing they loved is enough. Memory Lane finds the songs, films,
-          telly, food and places from their youth through Qloo&apos;s cultural taste graph and turns them into a printable
-          week of activities.
+          Tell us roughly when they were born and one thing they loved. Memory Lane finds songs, films, telly, food and
+          places from their teens and twenties, and sets them out as a week of activities you can print.
         </p>
       </section>
 
       {view === "quick" ? (
-        <section className="card no-print" aria-labelledby="quick-h">
-          <div className="quick-head">
-            <h2 id="quick-h">Quick start</h2>
-            <div className="samples">
-              <span>Try an example:</span>
-              {QUICK_SAMPLES.map((s) => (
-                <button key={s.firstName} type="button" className="btn btn-ghost" disabled={busy} onClick={() => tryExample(s)}>
-                  {s.firstName} · {s.loved}
-                </button>
-              ))}
-            </div>
-          </div>
+        <section className="sheet sheet-quick no-print" aria-label="Quick start">
           <QuickStart value={quick} country={country} onChange={setQuick} onCountry={setCountry} onSubmit={() => build()} busy={busy} />
           {error && (
             <p className="error" role="alert">
               {error}
             </p>
           )}
-          <p className="muted small">
-            Care needs, diet and more favourites are optional; add them after the first plan, or{" "}
-            <button type="button" className="btn btn-link inline" onClick={openFullForm}>
-              use the full form
-            </button>
-            .
-          </p>
         </section>
       ) : (
-        <section className="card no-print" id="full-form" aria-labelledby="full-h">
-          <div className="quick-head">
+        <section className="sheet sheet-pad no-print" id="full-form" aria-labelledby="full-h">
+          <div className="sheet-head">
             <h2 id="full-h">Full profile</h2>
-            <button type="button" className="btn btn-link" onClick={backToQuick}>
-              ← Back to Quick start
+            <button type="button" className="btn btn-quiet" onClick={backToQuick}>
+              Back to quick start
             </button>
           </div>
-          <div className="samples">
-            <span>Detailed examples:</span>
+          <div className="examples examples-inline">
+            <span className="examples-label">Start from a detailed example:</span>
             {SAMPLE_RESIDENTS.map((s) => (
-              <button key={s.firstName} className="btn btn-ghost" onClick={() => { setResident(s); setPlan(null); }}>
-                {s.firstName}, {s.hometown} ({s.birthYear})
+              <button key={s.firstName} className="example" onClick={() => { setResident(s); setPlan(null); }}>
+                <strong>{s.firstName}</strong>
+                <span>
+                  {s.hometown}, born {s.birthYear}
+                </span>
               </button>
             ))}
           </div>
@@ -173,28 +161,51 @@ export default function Home() {
               {error}
             </p>
           )}
-          <button className="btn btn-primary" onClick={() => build()} disabled={busy}>
-            {busy ? "Building the week…" : "Build the week’s plan"}
+          <button className="btn btn-primary btn-big" onClick={() => build()} disabled={busy} aria-busy={busy}>
+            {busy ? "Making the plan…" : "Make a week’s plan"}
           </button>
         </section>
       )}
 
+      {view === "quick" && (
+        <div className="below-sheet no-print">
+          <div className="examples">
+            <span className="examples-label">Or start from an example:</span>
+            {QUICK_SAMPLES.map((s) => (
+              <button key={s.firstName} type="button" className="example" disabled={busy} onClick={() => tryExample(s)}>
+                <strong>{s.firstName}</strong>
+                <span>loved {s.loved}</span>
+              </button>
+            ))}
+          </div>
+          <p className="muted small">
+            Care needs, diet and more favourites can be added once you have a first plan. Prefer to fill everything in now?{" "}
+            <button type="button" className="btn-text" onClick={openFullForm}>
+              Use the full form
+            </button>
+            .
+          </p>
+        </div>
+      )}
+
       <div id="plan">
         {plan && (
-          <>
-            {view === "quick" && (
-              <SharpenPanel
-                profile={{ ...resident, favourites: { ...resident.favourites, loved: payload.favourites.loved } }}
-                locked={quick.loved.trim()}
-                onChange={setResident}
-                onUpdate={() => build()}
-                onFullForm={openFullForm}
-                dirty={dirty}
-                busy={busy}
-              />
-            )}
-            <PlanView plan={plan} />
-          </>
+          <PlanView
+            plan={plan}
+            rail={
+              view === "quick" ? (
+                <SharpenPanel
+                  profile={{ ...resident, favourites: { ...resident.favourites, loved: payload.favourites.loved } }}
+                  locked={quick.loved.trim()}
+                  onChange={setResident}
+                  onUpdate={() => build()}
+                  onFullForm={openFullForm}
+                  dirty={dirty}
+                  busy={busy}
+                />
+              ) : undefined
+            }
+          />
         )}
       </div>
     </>

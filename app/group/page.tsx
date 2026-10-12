@@ -4,7 +4,8 @@ import { useState } from "react";
 import ResidentForm, { EMPTY_RESIDENT, cleanResident } from "@/components/ResidentForm";
 import ItemCard from "@/components/ItemCard";
 import TraceView from "@/components/TraceView";
-import { QUICK_SAMPLES, SAMPLE_RESIDENTS } from "@/lib/agent/care";
+import TuningDial from "@/components/TuningDial";
+import { QUICK_SAMPLES, SAMPLE_RESIDENTS, eraFor } from "@/lib/agent/care";
 import { parseBirth, parseBornText } from "@/lib/validate";
 import type { GroupSession, ResidentProfile } from "@/lib/types";
 
@@ -31,6 +32,7 @@ export default function GroupPage() {
       return [...rs, { ...r, firstName: r.firstName || `Resident ${rs.length + 1}` }].slice(0, 6);
     });
     setDraft(EMPTY_RESIDENT);
+    setSession(null);
   };
 
   // Quick add: just born + one favourite (name optional). Country defaults to the UK; use full details to change it.
@@ -49,6 +51,7 @@ export default function GroupPage() {
       ].slice(0, 6),
     );
     setQa({ firstName: "", born: "", loved: "" });
+    setSession(null);
   };
 
   async function build() {
@@ -61,7 +64,7 @@ export default function GroupPage() {
         body: JSON.stringify({ residents }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Something went wrong.");
+      if (!res.ok) throw new Error(body.error || "The session could not be planned. Check the residents above and try again.");
       setSession(body);
     } catch (e: any) {
       setError(e.message);
@@ -70,163 +73,242 @@ export default function GroupPage() {
     }
   }
 
+  const dialRows = residents.map((r, i) => {
+    const e = eraFor(r.birthYear);
+    return { label: label(r, i), birthYear: r.birthYear, start: e.formativeStart, end: e.formativeEnd, approx: r.birthYearApprox };
+  });
+  // Preview of the years everyone shares, before Qloo is asked (the session result confirms it).
+  const preview =
+    dialRows.length > 1
+      ? (() => {
+          const start = Math.max(...dialRows.map((r) => r.start));
+          const end = Math.min(...dialRows.map((r) => r.end));
+          return start <= end ? { start, end, overlap: true } : { start: Math.min(...dialRows.map((r) => r.start)), end: Math.max(...dialRows.map((r) => r.end)), overlap: false };
+        })()
+      : null;
+  const shared = session ? session.sharedWindow : preview;
+  const full = residents.length >= 6;
+
   return (
     <>
-      <section className="intro no-print">
-        <h1>Find the common ground</h1>
+      <section className="intro no-print" aria-labelledby="intro-h">
+        <h1 id="intro-h">Find the years they share.</h1>
         <p className="lead">
-          Add two to six residents. Memory Lane compares their tastes with Qloo, finds the years and themes they share, and
-          plans a 45-minute group session everyone can join in with.
+          Add two to six residents. Memory Lane compares their tastes with Qloo, finds the years and themes they have in
+          common, and plans a 45-minute session everyone can join in with.
         </p>
-        <div className="samples">
-          <button
-            className="btn btn-ghost"
-            onClick={() => {
-              setResidents(
-                QUICK_SAMPLES.map((q) => {
-                  const b = parseBornText(q.born) || {};
-                  return { ...EMPTY_RESIDENT, firstName: q.firstName, birthYear: parseBirth(b).year, favourites: { ...EMPTY_RESIDENT.favourites, loved: [q.loved] } };
-                }),
-              );
-              setSession(null);
+      </section>
+
+      <section className="sheet sheet-quick no-print" aria-labelledby="roster-h">
+        <TuningDial
+          rows={dialRows}
+          shared={shared}
+          idle="Add residents and the dial shows each person’s memory years, and where they overlap."
+          caption={
+            dialRows.length === 1 ? (
+              <>Add at least one more resident to find the years they share.</>
+            ) : shared ? (
+              shared.overlap ? (
+                <>
+                  Years they all share: <strong>{shared.start} to {shared.end}</strong>
+                </>
+              ) : (
+                <>
+                  No years in common, so the session spans <strong>{shared.start} to {shared.end}</strong>
+                </>
+              )
+            ) : undefined
+          }
+        />
+        <div className="quick-body">
+          <div className="sheet-head">
+            <h2 id="roster-h">
+              {residents.length === 0 ? "Who’s joining?" : `${residents.length} ${residents.length === 1 ? "resident" : "residents"} joining`}
+            </h2>
+            {residents.length === 0 && (
+              <div className="examples examples-inline">
+                <button
+                  type="button"
+                  className="example"
+                  onClick={() => {
+                    setResidents(
+                      QUICK_SAMPLES.map((q) => {
+                        const b = parseBornText(q.born) || {};
+                        return { ...EMPTY_RESIDENT, firstName: q.firstName, birthYear: parseBirth(b).year, favourites: { ...EMPTY_RESIDENT.favourites, loved: [q.loved] } };
+                      }),
+                    );
+                    setSession(null);
+                  }}
+                >
+                  <strong>Try an example</strong>
+                  <span>Margaret, Walter and Dorothy</span>
+                </button>
+                <button type="button" className="example" onClick={() => { setResidents(SAMPLE_RESIDENTS); setSession(null); }}>
+                  <strong>Detailed example</strong>
+                  <span>Three full profiles</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {residents.length > 0 && (
+            <ul className="roster">
+              {residents.map((r, i) => (
+                <li key={r.firstName + i}>
+                  <span className="roster-name">{label(r, i)}</span>
+                  <span className="roster-detail">
+                    Born {r.birthYearApprox ? "around " : ""}
+                    {r.birthYear}
+                    {r.hometown ? ` in ${r.hometown}` : ""}
+                    {(r.favourites.loved || []).length > 0 && `, loved ${(r.favourites.loved || []).join(", ")}`}
+                  </span>
+                  <button
+                    className="btn btn-quiet"
+                    onClick={() => {
+                      setResidents((rs) => rs.filter((_, k) => k !== i));
+                      setSession(null);
+                    }}
+                    aria-label={`Remove ${label(r, i)}`}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <form
+            className="quick-add"
+            onSubmit={(e) => {
+              e.preventDefault();
+              quickAdd();
             }}
+            aria-label="Add a resident"
           >
-            Try three quick examples
+            <label className="field">
+              <span className="field-label">Born</span>
+              <input value={qa.born} onChange={(e) => setQa({ ...qa, born: e.target.value })} placeholder="1946 or 1940s" autoComplete="off" />
+            </label>
+            <label className="field">
+              <span className="field-label">One thing they loved</span>
+              <input value={qa.loved} onChange={(e) => setQa({ ...qa, loved: e.target.value })} placeholder="Elvis" autoComplete="off" />
+            </label>
+            <label className="field">
+              <span className="field-label">
+                Name <span className="opt">(optional)</span>
+              </span>
+              <input value={qa.firstName} onChange={(e) => setQa({ ...qa, firstName: e.target.value })} placeholder="Ivy" autoComplete="off" />
+            </label>
+            <button type="submit" className="btn btn-secondary" disabled={!qaYear || !qa.loved.trim() || full}>
+              Add resident
+            </button>
+          </form>
+          {full && <p className="hint">Six residents is the most for one session.</p>}
+          <details className="add">
+            <summary>Add a resident with full details</summary>
+            <ResidentForm value={draft} onChange={setDraft} compact />
+            <button className="btn btn-secondary" onClick={add} disabled={full}>
+              Add resident
+            </button>
+          </details>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <button className="btn btn-primary btn-big" onClick={build} disabled={busy || residents.length < 2} aria-busy={busy}>
+            {busy ? "Finding common ground…" : "Plan the group session"}
           </button>
-          <button className="btn btn-ghost" onClick={() => { setResidents(SAMPLE_RESIDENTS); setSession(null); }}>
-            Load three detailed profiles
-          </button>
+          {residents.length < 2 && <p className="hint ready-hint">Add at least two residents to plan a session.</p>}
         </div>
       </section>
 
-      <section className="card no-print">
-        <h2>Residents in this session ({residents.length})</h2>
-        {residents.length > 0 ? (
-          <ul className="roster">
-            {residents.map((r, i) => (
-              <li key={r.firstName + i}>
-                <strong>{label(r, i)}</strong> · born {r.birthYearApprox ? "about " : ""}
-                {r.birthYear}
-                {r.hometown ? ` · ${r.hometown}` : ""}
-                {(r.favourites.loved || []).length > 0 && ` · loved ${(r.favourites.loved || []).join(", ")}`}
-                <button className="btn btn-link" onClick={() => setResidents((rs) => rs.filter((_, k) => k !== i))}>
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="muted">No one added yet.</p>
-        )}
-        <form
-          className="quick-add"
-          onSubmit={(e) => {
-            e.preventDefault();
-            quickAdd();
-          }}
-          aria-label="Quick add a resident"
-        >
-          <label>
-            Name <span className="opt">optional</span>
-            <input value={qa.firstName} onChange={(e) => setQa({ ...qa, firstName: e.target.value })} placeholder="Ivy" autoComplete="off" />
-          </label>
-          <label>
-            Born
-            <input value={qa.born} onChange={(e) => setQa({ ...qa, born: e.target.value })} placeholder="1946 or 1940s" autoComplete="off" />
-          </label>
-          <label>
-            One thing they loved
-            <input value={qa.loved} onChange={(e) => setQa({ ...qa, loved: e.target.value })} placeholder="e.g. Elvis" autoComplete="off" />
-          </label>
-          <button type="submit" className="btn btn-secondary" disabled={!qaYear || !qa.loved.trim() || residents.length >= 6}>
-            + Add
-          </button>
-        </form>
-        <details className="add">
-          <summary>Add a resident with full details</summary>
-          <ResidentForm value={draft} onChange={setDraft} compact />
-          <button className="btn btn-secondary" onClick={add} disabled={residents.length >= 6}>
-            Add to session
-          </button>
-        </details>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        <button className="btn btn-primary" onClick={build} disabled={busy || residents.length < 2}>
-          {busy ? "Finding common ground…" : "Plan the group session"}
-        </button>
-      </section>
-
       {session && (
-        <section className="plan">
+        <section className="plan" aria-labelledby="session-h" aria-live="polite">
           <header className="plan-head">
-            <div>
-              <p className="eyebrow">Group session · 45 minutes</p>
-              <h2>{session.residents.map((r) => r.firstName).join(", ")}</h2>
-              <p className="muted">
-                {session.sharedWindow.overlap ? "Shared formative years" : "Combined years"} {session.sharedWindow.start}–
-                {session.sharedWindow.end} · {session.qlooMode === "mock" ? "Demo data (mock Qloo)" : "Live Qloo"}
+            <div className="plan-title">
+              <h2 id="session-h">{session.residents.map((r) => r.firstName).join(", ").replace(/, ([^,]*)$/, " and $1")}</h2>
+              <p className="plan-sub">
+                A 45-minute group session built around {session.sharedWindow.overlap ? "the years they share" : "their combined years"},{" "}
+                {session.sharedWindow.start} to {session.sharedWindow.end}.
               </p>
             </div>
             <button className="btn btn-secondary no-print" onClick={() => window.print()}>
-              Print session
+              Print this session
             </button>
           </header>
 
           {session.warnings.length > 0 && (
-            <div className="notice no-print">
+            <div className="notice no-print" role="status">
               {session.warnings.map((w) => (
                 <p key={w}>{w}</p>
               ))}
             </div>
           )}
 
-          {session.sharedThemes.length > 0 && (
-            <div className="care-box">
-              <h3>What they have in common (Qloo compare)</h3>
-              <ul className="themes">
-                {session.sharedThemes.map((t) => (
-                  <li key={t.tag + t.between}>
-                    <strong>{t.tag}</strong> <span className="muted">· {t.between}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <div className="plan-layout">
+            <aside className="rail">
+              {session.sharedThemes.length > 0 && (
+                <div className="care-notes common">
+                  <h3>What they have in common</h3>
+                  <ul className="themes">
+                    {session.sharedThemes.map((t) => (
+                      <li key={t.tag + t.between}>
+                        <strong>{t.tag}</strong>
+                        <span>{t.between}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="understood-note">Found with Qloo compare.</p>
+                </div>
+              )}
+              <div className="care-notes">
+                <h3>For everyone</h3>
+                <ul>
+                  {session.adaptations.map((a) => (
+                    <li key={a}>{a}</li>
+                  ))}
+                </ul>
+              </div>
+            </aside>
 
-          <article className="day">
-            <h3>Running order</h3>
-            <ol className="steps">
-              {session.outline.map((o, i) => (
-                <li key={i}>
-                  <strong>
-                    {o.segment} ({o.minutes} min):
-                  </strong>{" "}
-                  {o.detail}
-                </li>
-              ))}
-            </ol>
-            <h4>Picks for the group</h4>
-            <ul className="items">
-              {session.picks.map((p) => (
-                <ItemCard key={p.entityId} item={p} />
-              ))}
-            </ul>
-            <h4>Things to ask the group</h4>
-            <ul className="prompts">
-              {session.prompts.map((p, i) => (
-                <li key={i}>“{p}”</li>
-              ))}
-            </ul>
-            <div className="adapt">
-              {session.adaptations.map((a) => (
-                <p key={a}>{a}</p>
-              ))}
+            <div className="days">
+              <article className="day">
+                <header className="day-head">
+                  <p className="day-name">Running order</p>
+                  <p className="day-mins">45 minutes</p>
+                </header>
+                <ol className="running">
+                  {session.outline.map((o, i) => (
+                    <li key={i}>
+                      <span className="running-min">{o.minutes} min</span>
+                      <span className="running-body">
+                        <strong>{o.segment}</strong>
+                        <span>{o.detail}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </article>
+              <article className="day">
+                <header className="day-head">
+                  <h3>Picks for the group</h3>
+                </header>
+                <ul className="items">
+                  {session.picks.map((p) => (
+                    <ItemCard key={p.entityId} item={p} />
+                  ))}
+                </ul>
+                <h4>Things to ask the group</h4>
+                <ul className="prompts">
+                  {session.prompts.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+              </article>
             </div>
-          </article>
-          <TraceView trace={session.trace} />
+          </div>
+          <TraceView trace={session.trace} composer={session.composer} />
         </section>
       )}
     </>

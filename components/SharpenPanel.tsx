@@ -34,7 +34,7 @@ export default function SharpenPanel({
   };
   const chip = (label: string, on: boolean, toggle: () => void) => (
     <button type="button" key={label} className={`chip${on ? " on" : ""}`} aria-pressed={on} onClick={toggle}>
-      {on ? "✓ " : "+ "}
+      <span className="chip-mark" aria-hidden="true">{on ? "✓" : "+"}</span>
       {label}
     </button>
   );
@@ -42,24 +42,26 @@ export default function SharpenPanel({
     chip(label, c.dementiaStage === s, () => setC({ dementiaStage: c.dementiaStage === s ? "none" : s }));
 
   return (
-    <section className="card sharpen no-print" aria-labelledby="sharpen-h">
-      <h2 id="sharpen-h">Add more to sharpen this</h2>
-      <p className="hint">All optional. Tap what applies, then update the plan.</p>
+    <section className="sharpen no-print" aria-labelledby="sharpen-h">
+      <h3 id="sharpen-h">Sharpen this plan</h3>
+      <p className="hint">Tap anything that applies, then update the plan.</p>
 
-      <div className="chip-row" role="group" aria-label="Care needs">
+      <p className="group-label" id="sh-care">Care needs</p>
+      <div className="chip-row" role="group" aria-labelledby="sh-care">
         {chip("Hard of hearing", c.hearing !== "none", () => setC({ hearing: c.hearing === "none" ? "mild" : "none" }))}
         {chip("Poor eyesight", c.vision !== "none", () => setC({ vision: c.vision === "none" ? "mild" : "none" }))}
         {chip("Soft foods", c.softFoods, () => setC({ softFoods: !c.softFoods }))}
         {chip("Diabetic", c.diabetic, () => setC({ diabetic: !c.diabetic }))}
       </div>
-      <div className="chip-row" role="group" aria-label="Dementia">
-        {stage("early", "Dementia: early")}
-        {stage("moderate", "Dementia: moderate")}
-        {stage("advanced", "Dementia: advanced")}
+      <p className="group-label" id="sh-dementia">Dementia</p>
+      <div className="chip-row" role="group" aria-labelledby="sh-dementia">
+        {stage("early", "Early stage")}
+        {stage("moderate", "Moderate")}
+        {stage("advanced", "Advanced")}
       </div>
 
-      <div className="loved-row">
-        <span className="muted">Things they loved:</span>
+      <p className="group-label" id="sh-loved">Things they loved</p>
+      <div className="chip-row" role="group" aria-labelledby="sh-loved">
         {loved.map((x) => (
           <span key={x} className="chip on static">
             {x}
@@ -70,36 +72,36 @@ export default function SharpenPanel({
             )}
           </span>
         ))}
-        <span className="add-loved">
-          <input
-            value={extra}
-            onChange={(e) => setExtra(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addExtra();
-              }
-            }}
-            placeholder="Add another favourite"
-            aria-label="Add another favourite"
-          />
-          <button type="button" className="btn btn-secondary" onClick={addExtra} disabled={!extra.trim()}>
-            Add
-          </button>
-        </span>
+      </div>
+      <div className="add-loved">
+        <input
+          value={extra}
+          onChange={(e) => setExtra(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addExtra();
+            }
+          }}
+          placeholder="Another favourite"
+          aria-label="Add another thing they loved"
+        />
+        <button type="button" className="btn btn-secondary" onClick={addExtra} disabled={!extra.trim()}>
+          Add
+        </button>
       </div>
 
-      <div className="sharpen-actions">
-        <button className="btn btn-primary" onClick={onUpdate} disabled={busy || !dirty}>
-          {busy ? "Updating…" : dirty ? "Update the plan" : "Plan is up to date"}
-        </button>
-        <button type="button" className="btn btn-link" onClick={onFullForm}>
+      <button className="btn btn-primary btn-wide" onClick={onUpdate} disabled={busy || !dirty} aria-busy={busy}>
+        {busy ? "Updating the plan…" : dirty ? "Update the plan" : "Plan is up to date"}
+      </button>
+      <p className="sharpen-links">
+        <button type="button" className="btn-text" onClick={onFullForm}>
           Open the full form
         </button>
-        <a className="btn btn-link" href="/group">
+        <a className="btn-text" href="/group">
           Plan a group session
         </a>
-      </div>
+      </p>
     </section>
   );
 }
