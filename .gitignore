@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+.DS_Store
+# Never commit real Qloo responses (hackathon terms): keep any local captures here
+qloo-cache/
+*.qloo.json
