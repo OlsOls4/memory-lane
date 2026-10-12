@@ -54,7 +54,8 @@ export default function QuickStart({
     >
       <TuningDial
         rows={year && era ? [{ birthYear: year.year, start: era.formativeStart, end: era.formativeEnd, approx: year.approx }] : []}
-        idle="Type when they were born and the dial finds the years they remember best."
+        idle="Type when they were born, or drag the needle, and the dial finds the years they remember best."
+        onTune={(y) => set({ born: String(y) })}
         caption={
           year && era ? (
             <>

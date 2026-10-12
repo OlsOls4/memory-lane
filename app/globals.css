@@ -110,6 +110,16 @@ main { max-width: 1160px; margin: 0 auto; padding: 0 1.25rem 5rem; }
 .dial-stack .dial-track { height: 24px; }
 .dial-shared { position: absolute; top: -6px; bottom: -6px; border-left: 2px solid var(--amber); border-right: 2px solid var(--amber); background: rgba(240, 178, 58, 0.16); border-radius: 4px; transition: left 0.55s ease, width 0.55s ease; }
 .dial-shared.loose { border-style: dashed; background: rgba(232, 238, 244, 0.06); }
+/* Interactive dial (Quick start): click, drag or arrow keys set the birth year. */
+.dial-live .dial-glass { cursor: ew-resize; touch-action: none; user-select: none; -webkit-user-select: none; padding-top: 0.35rem; padding-bottom: 0.35rem; margin: -0.35rem 0; border-radius: 10px; }
+.dial-live .dial-glass:focus-visible { outline: 3px solid var(--amber); outline-offset: 4px; box-shadow: none; }
+.dial-live .dial-needle::before { width: 16px; height: 16px; top: -7px; left: -6.5px; background: var(--amber); box-shadow: 0 0 0 2px #ffffff, 0 0 12px 2px rgba(240, 178, 58, 0.6); cursor: grab; }
+.dial-live.dragging .dial-glass, .dial-live.dragging .dial-needle::before { cursor: grabbing; }
+.dial-live .dial-glass:hover .dial-needle.parked { opacity: 0.8; }
+.dial-needle-year { position: absolute; bottom: -1.55rem; left: 50%; transform: translateX(-50%); font-family: var(--display); font-size: 0.95rem; color: var(--amber); white-space: nowrap; }
+.dial-live .dial-tracks { margin-bottom: 1.4rem; }
+.dragging .dial-needle, .dragging .dial-band { transition: none; }
+@media (prefers-reduced-motion: reduce) { .dial-needle, .dial-band, .dial-shared { transition: none; } }
 .dial-caption { margin-top: 0.8rem; font-size: 1rem; color: #dce4ec; }
 .dial-caption strong { color: var(--amber); }
 
