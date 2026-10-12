@@ -187,7 +187,7 @@ input[aria-invalid="true"] { border-color: var(--error); }
 .small { font-size: 0.93rem; margin: 1rem 0 0; }
 
 /* ---------- Plan ---------- */
-.plan { margin-top: 3rem; scroll-margin-top: 1rem; }
+.plan { margin: 3rem auto 0; max-width: 52rem; scroll-margin-top: 1rem; }
 .plan-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 1rem 1.5rem; margin-bottom: 1.25rem; }
 .plan-title h2 { margin-bottom: 0.15em; }
 .plan-sub { font-size: 1.15rem; color: var(--muted); margin: 0; max-width: 60ch; }
@@ -203,10 +203,13 @@ input[aria-invalid="true"] { border-color: var(--error); }
 .notice { background: var(--amber-tint); border-radius: 14px; padding: 0.8rem 1.1rem; margin: 0 0 1.25rem; }
 .notice p { margin: 0.2rem 0; }
 
-.plan-layout { display: grid; gap: 1.5rem; align-items: start; }
-@media (min-width: 1000px) { .plan-layout { grid-template-columns: 19rem minmax(0, 1fr); gap: 2rem; } }
+.plan-layout { display: grid; gap: 1.5rem; min-width: 0; }
 .rail { display: grid; gap: 1.25rem; min-width: 0; }
-.week-index { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.35rem; }
+.plan-after { display: grid; gap: 1.25rem; min-width: 0; margin-top: 0.5rem; }
+.week-index {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.35rem;
+  position: sticky; top: 0; z-index: 5; padding: 0.6rem 0; background: var(--duck);
+}
 .week-index a {
   display: flex; align-items: center; justify-content: center; min-height: 48px; border-radius: 12px; background: var(--sheet);
   color: var(--navy); text-decoration: none; font-family: var(--display); font-size: 1rem; border: 2px solid transparent;
@@ -355,7 +358,7 @@ input[aria-invalid="true"] { border-color: var(--error); }
   .plan-sub, .plan-print-meta { color: #000; }
   .plan-print-meta { font-size: 9pt; margin-top: 2pt; }
   .plan-layout { display: block; }
-  .rail { display: block; margin-bottom: 8pt; }
+  .plan-after { display: block; margin-top: 8pt; }
   .care-notes { border: 1px solid #777; border-radius: 6pt; padding: 6pt 10pt; }
   .days { display: block; }
   .day { border: 1px solid #777; border-radius: 6pt; box-shadow: none; padding: 8pt 10pt; margin-bottom: 8pt; break-inside: avoid; page-break-inside: avoid; }

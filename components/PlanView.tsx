@@ -77,24 +77,13 @@ export default function PlanView({ plan, rail }: { plan: WeekPlan; rail?: React.
       )}
 
       <div className="plan-layout">
-        <aside className="rail">
-          <nav className="week-index no-print" aria-label="Days of the week">
-            {plan.days.map((d) => (
-              <a key={d.day} href={`#${slug(d.day)}`}>
-                {d.day.slice(0, 3)}
-              </a>
-            ))}
-          </nav>
-          <div className="care-notes">
-            <h3>Every session</h3>
-            <ul>
-              {plan.generalAdaptations.map((a) => (
-                <li key={a}>{a}</li>
-              ))}
-            </ul>
-          </div>
-          {rail}
-        </aside>
+        <nav className="week-index no-print" aria-label="Days of the week">
+          {plan.days.map((d) => (
+            <a key={d.day} href={`#${slug(d.day)}`}>
+              {d.day.slice(0, 3)}
+            </a>
+          ))}
+        </nav>
 
         <div className="days">
           {plan.days.map((d) => (
@@ -141,6 +130,18 @@ export default function PlanView({ plan, rail }: { plan: WeekPlan; rail?: React.
               )}
             </article>
           ))}
+        </div>
+
+        <div className="plan-after">
+          <div className="care-notes">
+            <h3>Every session</h3>
+            <ul>
+              {plan.generalAdaptations.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+          </div>
+          {rail}
         </div>
       </div>
 
