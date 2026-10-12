@@ -14,6 +14,24 @@ function readUnderstood(line: string) {
   return m ? { typed: m[1], read: m[2] } : { typed: "", read: line };
 }
 
+function PrinterIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 9V3h12v6" />
+      <rect x="3" y="9" width="18" height="8" rx="2" />
+      <path d="M6 14h12v7H6z" />
+    </svg>
+  );
+}
+
+function PrintButton() {
+  return (
+    <button type="button" className="btn btn-primary btn-print no-print" onClick={() => window.print()}>
+      <PrinterIcon /> Print this week
+    </button>
+  );
+}
+
 export default function PlanView({ plan, rail }: { plan: WeekPlan; rail?: React.ReactNode }) {
   const r = plan.resident;
   // Open every "Why this?" before printing so the printed sheet carries the reasons too.
@@ -37,9 +55,7 @@ export default function PlanView({ plan, rail }: { plan: WeekPlan; rail?: React.
             {plan.qlooMode === "mock" ? "Demo data" : "Recommendations from Qloo’s taste graph"}. Made with Memory Lane.
           </p>
         </div>
-        <button className="btn btn-secondary no-print" onClick={() => window.print()}>
-          Print this week
-        </button>
+        <PrintButton />
       </header>
 
       <div className="no-print">
@@ -77,13 +93,18 @@ export default function PlanView({ plan, rail }: { plan: WeekPlan; rail?: React.
       )}
 
       <div className="plan-layout">
-        <nav className="week-index no-print" aria-label="Days of the week">
-          {plan.days.map((d) => (
-            <a key={d.day} href={`#${slug(d.day)}`}>
-              {d.day.slice(0, 3)}
-            </a>
-          ))}
-        </nav>
+        <div className="week-bar no-print">
+          <nav className="week-index" aria-label="Days of the week">
+            {plan.days.map((d) => (
+              <a key={d.day} href={`#${slug(d.day)}`}>
+                {d.day.slice(0, 3)}
+              </a>
+            ))}
+          </nav>
+          <button type="button" className="week-print" onClick={() => window.print()} aria-label="Print this week">
+            <PrinterIcon /> <span>Print</span>
+          </button>
+        </div>
 
         <div className="days">
           {plan.days.map((d) => (
@@ -120,6 +141,11 @@ export default function PlanView({ plan, rail }: { plan: WeekPlan; rail?: React.
                   </ul>
                 </div>
               </div>
+              <div className="print-only joy">
+                <p>What sparked joy today:</p>
+                <span />
+                <span />
+              </div>
               {d.adaptations.length > 0 && (
                 <div className="adapt">
                   <h4>For {name || "them"}</h4>
@@ -142,6 +168,10 @@ export default function PlanView({ plan, rail }: { plan: WeekPlan; rail?: React.
             </ul>
           </div>
           {rail}
+          <div className="print-again no-print">
+            <PrintButton />
+            <p className="muted small">Prints one clean A4 sheet per day or two, with the reasons and a space to note what sparked joy.</p>
+          </div>
         </div>
       </div>
 
