@@ -4,7 +4,8 @@ import { useState } from "react";
 import ResidentForm, { EMPTY_RESIDENT, cleanResident } from "@/components/ResidentForm";
 import ItemCard from "@/components/ItemCard";
 import TraceView from "@/components/TraceView";
-import { SAMPLE_RESIDENTS } from "@/lib/agent/care";
+import { QUICK_SAMPLES, SAMPLE_RESIDENTS } from "@/lib/agent/care";
+import { parseBirth, parseBornText } from "@/lib/validate";
 import type { GroupSession, ResidentProfile } from "@/lib/types";
 
 export default function GroupPage() {
@@ -14,10 +15,40 @@ export default function GroupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [qa, setQa] = useState({ firstName: "", born: "", loved: "" });
+  const qaBorn = parseBornText(qa.born);
+  let qaYear: number | null = null;
+  try {
+    qaYear = qaBorn ? parseBirth(qaBorn).year : null;
+  } catch {
+    qaYear = null;
+  }
+  const label = (r: ResidentProfile, i: number) => r.firstName || `Resident ${i + 1}`;
+
   const add = () => {
-    if (!draft.firstName) return;
-    setResidents((rs) => [...rs, cleanResident(draft)].slice(0, 6));
+    setResidents((rs) => {
+      const r = cleanResident(draft);
+      return [...rs, { ...r, firstName: r.firstName || `Resident ${rs.length + 1}` }].slice(0, 6);
+    });
     setDraft(EMPTY_RESIDENT);
+  };
+
+  // Quick add: just born + one favourite (name optional). Country defaults to the UK; use full details to change it.
+  const quickAdd = () => {
+    if (!qaYear || !qa.loved.trim()) return;
+    setResidents((rs) =>
+      [
+        ...rs,
+        {
+          ...EMPTY_RESIDENT,
+          firstName: qa.firstName.trim() || `Resident ${rs.length + 1}`,
+          birthYear: qaYear!,
+          birthYearApprox: !qaBorn?.birthYear || undefined,
+          favourites: { ...EMPTY_RESIDENT.favourites, loved: [qa.loved.trim()] },
+        },
+      ].slice(0, 6),
+    );
+    setQa({ firstName: "", born: "", loved: "" });
   };
 
   async function build() {
@@ -47,9 +78,25 @@ export default function GroupPage() {
           Add two to six residents. Memory Lane compares their tastes with Qloo, finds the years and themes they share, and
           plans a 45-minute group session everyone can join in with.
         </p>
-        <button className="btn btn-ghost" onClick={() => { setResidents(SAMPLE_RESIDENTS); setSession(null); }}>
-          Load three example residents
-        </button>
+        <div className="samples">
+          <button
+            className="btn btn-ghost"
+            onClick={() => {
+              setResidents(
+                QUICK_SAMPLES.map((q) => {
+                  const b = parseBornText(q.born) || {};
+                  return { ...EMPTY_RESIDENT, firstName: q.firstName, birthYear: parseBirth(b).year, favourites: { ...EMPTY_RESIDENT.favourites, loved: [q.loved] } };
+                }),
+              );
+              setSession(null);
+            }}
+          >
+            Try three quick examples
+          </button>
+          <button className="btn btn-ghost" onClick={() => { setResidents(SAMPLE_RESIDENTS); setSession(null); }}>
+            Load three detailed profiles
+          </button>
+        </div>
       </section>
 
       <section className="card no-print">
@@ -58,7 +105,10 @@ export default function GroupPage() {
           <ul className="roster">
             {residents.map((r, i) => (
               <li key={r.firstName + i}>
-                <strong>{r.firstName}</strong> · born {r.birthYear} · {r.hometown || r.country}
+                <strong>{label(r, i)}</strong> · born {r.birthYearApprox ? "about " : ""}
+                {r.birthYear}
+                {r.hometown ? ` · ${r.hometown}` : ""}
+                {(r.favourites.loved || []).length > 0 && ` · loved ${(r.favourites.loved || []).join(", ")}`}
                 <button className="btn btn-link" onClick={() => setResidents((rs) => rs.filter((_, k) => k !== i))}>
                   Remove
                 </button>
@@ -68,10 +118,34 @@ export default function GroupPage() {
         ) : (
           <p className="muted">No one added yet.</p>
         )}
+        <form
+          className="quick-add"
+          onSubmit={(e) => {
+            e.preventDefault();
+            quickAdd();
+          }}
+          aria-label="Quick add a resident"
+        >
+          <label>
+            Name <span className="opt">optional</span>
+            <input value={qa.firstName} onChange={(e) => setQa({ ...qa, firstName: e.target.value })} placeholder="Ivy" autoComplete="off" />
+          </label>
+          <label>
+            Born
+            <input value={qa.born} onChange={(e) => setQa({ ...qa, born: e.target.value })} placeholder="1946 or 1940s" autoComplete="off" />
+          </label>
+          <label>
+            One thing they loved
+            <input value={qa.loved} onChange={(e) => setQa({ ...qa, loved: e.target.value })} placeholder="e.g. Elvis" autoComplete="off" />
+          </label>
+          <button type="submit" className="btn btn-secondary" disabled={!qaYear || !qa.loved.trim() || residents.length >= 6}>
+            + Add
+          </button>
+        </form>
         <details className="add">
-          <summary>Add a resident</summary>
+          <summary>Add a resident with full details</summary>
           <ResidentForm value={draft} onChange={setDraft} compact />
-          <button className="btn btn-secondary" onClick={add} disabled={!draft.firstName || residents.length >= 6}>
+          <button className="btn btn-secondary" onClick={add} disabled={residents.length >= 6}>
             Add to session
           </button>
         </details>

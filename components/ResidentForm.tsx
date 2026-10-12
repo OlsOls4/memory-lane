@@ -7,7 +7,7 @@ export const EMPTY_RESIDENT: ResidentProfile = {
   birthYear: 1945,
   hometown: "",
   country: "United Kingdom",
-  favourites: { artists: [], films: [], tvShows: [], books: [], foods: [], hobbies: [] },
+  favourites: { artists: [], films: [], tvShows: [], books: [], foods: [], hobbies: [], loved: [] },
   constraints: { hearing: "none", vision: "none", dementiaStage: "none", softFoods: false, diabetic: false },
 };
 
@@ -20,6 +20,7 @@ const FAV_FIELDS: { key: Fav; label: string; hint: string }[] = [
   { key: "books", label: "Books", hint: "optional" },
   { key: "foods", label: "Foods & places to eat", hint: "e.g. fish and chips, afternoon tea" },
   { key: "hobbies", label: "Hobbies & passions", hint: "e.g. dancing, football, knitting" },
+  { key: "loved", label: "Anything else they loved", hint: "any domain: Memory Lane works out what it is" },
 ];
 
 export default function ResidentForm({
@@ -43,7 +44,7 @@ export default function ResidentForm({
         <legend>About them</legend>
         <div className="grid">
           <label>
-            First name
+            First name (optional)
             <input value={value.firstName} onChange={(e) => set({ firstName: e.target.value })} placeholder="Margaret" autoComplete="off" />
           </label>
           <label>
@@ -81,7 +82,7 @@ export default function ResidentForm({
           {FAV_FIELDS.filter((f) => !compact || f.key !== "books").map((f) => (
             <label key={f.key}>
               {f.label}
-              <input value={value.favourites[f.key].join(",")} onChange={(e) => setFav(f.key, e.target.value)} placeholder={f.hint} />
+              <input value={(value.favourites[f.key] || []).join(",")} onChange={(e) => setFav(f.key, e.target.value)} placeholder={f.hint} />
             </label>
           ))}
         </div>
@@ -139,6 +140,6 @@ export function cleanResident(r: ResidentProfile): ResidentProfile {
   const tidy = (xs: string[]) => xs.map((s) => s.trim()).filter(Boolean);
   return {
     ...r,
-    favourites: Object.fromEntries(Object.entries(r.favourites).map(([k, v]) => [k, tidy(v)])) as unknown as ResidentProfile["favourites"],
+    favourites: Object.fromEntries(Object.entries(r.favourites).map(([k, v]) => [k, tidy(v || [])])) as unknown as ResidentProfile["favourites"],
   };
 }

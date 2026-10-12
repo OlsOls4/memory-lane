@@ -19,10 +19,14 @@ export interface ResidentFavourites {
   books: string[];
   foods: string[]; // dishes, cafés, places to eat
   hobbies: string[];
+  /** Quick start: free-text "things they loved" in any domain. The agent infers the domain via Qloo /search + /v2/tags. */
+  loved?: string[];
 }
 
 export interface ResidentProfile {
-  firstName: string;
+  firstName: string; // optional in Quick start: "" means not given
+  /** Set when birthYear was estimated from a decade or an age rather than typed exactly. */
+  birthYearApprox?: boolean;
   birthYear: number;
   hometown: string; // town / city
   country: string; // e.g. "United Kingdom", "United States"
@@ -119,6 +123,8 @@ export interface WeekPlan {
   qlooMode: "live" | "mock";
   trace: TraceStep[];
   warnings: string[];
+  /** How the agent read each free-text "loved" item, e.g. 'Elvis → singer/band (Qloo artist)'. */
+  understood?: string[];
   generatedAt: string;
 }
 

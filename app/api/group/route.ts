@@ -20,6 +20,10 @@ export async function POST(req: Request) {
   let residents;
   try {
     residents = raw.map(parseResident);
+    // Quick-add residents may have no name: label them so the session can say who each pick suits.
+    residents.forEach((r: any, i: number) => {
+      if (!r.firstName) r.firstName = `Resident ${i + 1}`;
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 });
   }

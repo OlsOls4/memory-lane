@@ -7,6 +7,7 @@ import { QlooService } from "../qloo/client";
 import { adaptationsFor, isUK } from "./care";
 import { gatherResident, toItem, type ResidentContext } from "./orchestrator";
 import { geminiEnabled, geminiJSON } from "./gemini";
+import { displayName } from "../validate";
 
 const take = <X>(xs: X[], n: number) => xs.slice(0, n);
 
@@ -29,7 +30,7 @@ function sessionLength(p: ResidentProfile, base: number) {
 
 function templateDays(ctx: ResidentContext): DayPlan[] {
   const p = ctx.profile;
-  const n = p.firstName;
+  const n = displayName(p);
   const uk = isUK(p.country);
   const { formativeStart: s, formativeEnd: e } = ctx.era;
   const adv = p.constraints.dementiaStage === "advanced" || p.constraints.dementiaStage === "moderate";
@@ -51,7 +52,7 @@ function templateDays(ctx: ResidentContext): DayPlan[] {
       day: "Monday",
       theme: "Songs of my youth",
       domain: "music",
-      title: `${n}'s hit parade`,
+      title: `${displayName(p, true)}'s hit parade`,
       intro: `Music from ${s}–${e}, chosen from ${n}'s own favourites and the artists Qloo's taste graph links to them.`,
       durationMins: sessionLength(p, 30),
       steps: [
@@ -198,7 +199,7 @@ async function geminiPolish(days: DayPlan[], ctx: ResidentContext): Promise<DayP
   const p = ctx.profile;
   const brief = {
     resident: {
-      firstName: p.firstName,
+      firstName: p.firstName || "(not given: say 'the resident')",
       birthYear: p.birthYear,
       hometown: p.hometown,
       country: p.country,
@@ -273,7 +274,7 @@ export async function buildWeekPlan(profile: ResidentProfile): Promise<WeekPlan>
     ]);
   }
 
-  const general = adaptationsFor(profile.constraints, profile.firstName);
+  const general = adaptationsFor(profile.constraints, displayName(profile));
   const dietLines = general.filter((l) => /diet|Diabetic|IDDSI/i.test(l));
   const senseLines = general.filter((l) => /^(Hearing|Vision)/.test(l));
   days = days.map((d) => ({
@@ -290,6 +291,7 @@ export async function buildWeekPlan(profile: ResidentProfile): Promise<WeekPlan>
     qlooMode: svc.mock ? "mock" : "live",
     trace: svc.trace,
     warnings: ctx.warnings,
+    understood: ctx.understood,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -341,7 +343,10 @@ export async function buildGroupSession(residents: ResidentProfile[]): Promise<G
   const allSeeds = [...new Set(ctxs.flatMap(seedIds))].slice(0, 25).join(",") || undefined;
   const common = {
     "signal.interests.entities": allSeeds,
-    "signal.interests.tags": topThemeIds.join(",") || undefined,
+    // Shared themes first, then interests read from quick-add favourites (e.g. "dancing", "afternoon tea").
+    "signal.interests.tags":
+      [...new Set([...topThemeIds, ...ctxs.flatMap((c) => [...c.hobbyTags, ...c.foodTags].map((t) => t.id))])].slice(0, 10).join(",") ||
+      undefined,
     "signal.demographics.age": "55_and_older",
     "feature.explainability": true,
     take: 12,
@@ -368,7 +373,9 @@ export async function buildGroupSession(residents: ResidentProfile[]): Promise<G
         if (own.some((x) => x.id === id)) return true;
         // Otherwise require at least two taste tags in common with this resident's own favourites.
         const seedTags = new Set([...c.seeds.artists, ...c.seeds.films, ...c.seeds.tv].flatMap((x) => x.tags.map((t) => t.id)));
-        return tags.filter((t) => seedTags.has(t)).length >= 2;
+        if (tags.filter((t) => seedTags.has(t)).length >= 2) return true;
+        // Quick-add residents may only have an interest tag: one direct tag match counts for them.
+        return [...c.hobbyTags, ...c.foodTags].some((h) => tags.includes(h.id));
       })
       .map((r) => r.firstName);
 

@@ -3,16 +3,33 @@
 **Personalised, culturally grounded reminiscence plans for care-home residents, powered by Qloo's taste graph.**
 
 Activity coordinators in UK and US care homes run reminiscence sessions every week. Most use the same generic
-"1950s playlist" for everyone. Memory Lane is an agent that takes a short resident profile (first name, birth year,
-where they grew up, a few things they loved, and their care needs) and builds a **one-week plan of activities**
-matched to that person's own taste and to the years when their memories are strongest. It also plans **group sessions**
-that find the common ground between several residents.
+"1950s playlist" for everyone. Memory Lane is an agent that builds a **one-week plan of activities** matched to a
+resident's own taste and to the years when their memories are strongest. It also plans **group sessions** that find the
+common ground between several residents.
+
+**Staff don't have to fill in a long profile.** The default Quick start asks for three things: when they were born
+(a year, a decade or an age), where they grew up (optional), and **one thing they loved**, in any domain. The agent works
+out whether that is a singer, a film, a TV show, a food or a pastime through Qloo, and makes a full week from it.
 
 > Built for the [Qloo Agentic Hackathon](https://qloo.devpost.com/). Status: first working version. Runs end to end in mock mode
 > with zero keys. Live Qloo and Gemini switch on when you add the keys.
 
 ## What it does
 
+- **Quick start (the default)**: four boxes and a big **Make a plan** button.
+
+  | Field | Required? | Accepts |
+  |---|---|---|
+  | First name | optional | Wording says "this resident" if it's blank |
+  | Born | **yes** | `1946`, `1940s` / `40s`, or `age 82` / `82` (decades use the mid-point, ages count back from this year) |
+  | Where they grew up | optional | A town, or `Chicago, USA`. Country defaults to the UK (US etc. from the browser language) and can be changed inline. With no town the agent uses the country |
+  | One thing they loved | **yes** | Free text in any domain: `Elvis`, `Coronation Street`, `afternoon tea`, `ballroom dancing` |
+
+  **Try an example** buttons (Margaret · Cilla Black, Walter · Frank Sinatra, Dorothy · afternoon tea) build a plan in one tap.
+  After the first plan, **Add more to sharpen this** offers one-tap chips (Hard of hearing, Poor eyesight, Soft foods,
+  Diabetic, Dementia: early / moderate / advanced) and an "Add another favourite" box, then **Update the plan**.
+  The plan shows how the agent read the favourite (for example `"Elvis" → singer/band: Elvis Presley`).
+  The **full form** (every favourite type and care field) is one click away.
 - **One resident → seven days**: Monday music, Tuesday films, Wednesday "a taste of home", Thursday telly, Friday
   armchair travel, Saturday stories and radio, Sunday a memory-box sing-along.
 - Every item is chosen from **Qloo results** and carries a **"Why this?"** note built from the Qloo signals behind it:
@@ -20,7 +37,7 @@ that find the common ground between several residents.
   with the resident's age at the time, and tags it shares with their hobbies.
 - **Care adaptations** for hearing, sight, dementia stage (early, moderate or advanced change the questions, session length
   and approach), soft/IDDSI diets and diabetes.
-- **Group mode** (2–6 residents): shared formative years, shared taste themes via Qloo's compare endpoint, blended picks
+- **Group mode** (2–6 residents, quick-add each with just born + one favourite, name optional): shared formative years, shared taste themes via Qloo's compare endpoint, blended picks
   labelled with who each one is likely to reach, and a 45-minute running order.
 - **Printable** weekly sheet (A4 print CSS; the reasons print too).
 - A visible **agent trace** ("How Memory Lane chose this") shows every tool call, its exact parameters, results and timing.
@@ -31,6 +48,7 @@ Without Qloo this becomes a generic decade playlist. Qloo is what makes it **thi
 
 | Step | Qloo call | What it adds |
 |---|---|---|
+| Infer the domain of one free-text favourite (Quick start) | one `GET /search` with `types=urn:entity:artist,urn:entity:movie,urn:entity:tv_show,urn:entity:book` plus `GET /v2/tags`, in parallel | Decides what "Elvis" or "afternoon tea" is: exact entity match, then exact tag match, then partial entity match, then any tag. Entities become seeds for every domain; tags become interest or food signals |
 | Resolve favourites | `GET /search` (`types=urn:entity:artist`, `movie`, `tv_show`, `book`, `locality`) | Turns "Cilla Black" or "Liverpool" into entity IDs the taste graph understands |
 | Resolve hobbies and foods | `GET /v2/tags?filter.query=…` | "dancing" or "fish and chips" become tag signals |
 | Music | `GET /v2/insights` `filter.type=urn:entity:artist`, `signal.interests.entities` (artists + films + TV, cross-domain), `signal.interests.tags`, `signal.demographics.age=55_and_older`, `feature.explainability=true` | Artists that people with this taste love, not just the decade's chart hits |
@@ -73,12 +91,17 @@ cp .env.example .env.local   # optional: leave keys blank for mock + template mo
 npm run dev                  # http://localhost:3000
 ```
 
-Try the example residents (Margaret from Liverpool, Walter from Chicago, Dorothy from Glasgow) on the home page, or
-load all three on **Group session**.
+On the home page, tap **Try an example** or fill in Born + One thing they loved and press **Make a plan**. The detailed
+example residents (Margaret from Liverpool, Walter from Chicago, Dorothy from Glasgow) are under **use the full form**,
+and **Group session** can load quick or detailed examples.
 
-API smoke test:
+API smoke test (minimal Quick start input, then a full profile):
 
 ```bash
+curl -s -X POST http://localhost:3000/api/plan -H 'content-type: application/json' \
+  -d '{"resident":{"birthDecade":"1940s","hometown":"Liverpool","loved":"Cilla Black"}}'
+curl -s -X POST http://localhost:3000/api/group -H 'content-type: application/json' \
+  -d '{"residents":[{"birthYear":1946,"loved":"Cilla Black"},{"age":84,"loved":"dancing"},{"birthDecade":"1930s","loved":"Frank Sinatra"}]}'
 curl -s -X POST http://localhost:3000/api/plan -H 'content-type: application/json' \
   -d '{"resident":{"firstName":"Margaret","birthYear":1946,"hometown":"Liverpool","country":"United Kingdom",
        "favourites":{"artists":["Cilla Black","The Beatles"],"films":["The Sound of Music"],"tvShows":["Coronation Street"],
@@ -86,6 +109,10 @@ curl -s -X POST http://localhost:3000/api/plan -H 'content-type: application/jso
        "constraints":{"hearing":"mild","dementiaStage":"moderate","softFoods":true}}}'
 curl -s http://localhost:3000/api/status    # {"qloo":"mock"|"live","composer":"template"|"gemini"}
 ```
+
+`/api/plan` accepts `birthYear`, `birthDecade` (`"1940s"`) or `age`; `firstName`, `hometown`, `country` and
+`constraints` are optional; `loved` (string or list, top level or under `favourites`) holds free-text favourites in any
+domain alongside the typed `favourites.artists / films / tvShows / books / foods / hobbies` lists.
 
 ## Environment variables
 
@@ -111,7 +138,7 @@ Unknown names still work in mock mode because the mock creates a clearly-labelle
 
 ## Deploy to Vercel (free tier)
 
-1. Push the repo to GitHub.
+1. Fork or import [github.com/OlsOls4/memory-lane](https://github.com/OlsOls4/memory-lane).
 2. In Vercel: **Add New → Project**, import the repo. The framework preset is Next.js and no build settings need changing.
 3. Add `QLOO_API_KEY`, and optionally `GEMINI_API_KEY`, under **Settings → Environment Variables**.
 4. Deploy. The API routes run as Node serverless functions (`maxDuration = 60`). A single plan makes about 18 Qloo
@@ -127,22 +154,22 @@ Unknown names still work in mock mode because the mock creates a clearly-labelle
 
 ```
 app/
-  page.tsx              one-resident planner
+  page.tsx              one-resident planner: Quick start (default), sharpen chips, full form
   group/page.tsx        group session planner
   api/plan/route.ts     POST → WeekPlan
   api/group/route.ts    POST → GroupSession
   api/status/route.ts   GET  → active modes
-components/             ResidentForm, PlanView, ItemCard, TraceView, ModeBadge
+components/             QuickStart, SharpenPanel, ResidentForm, PlanView, ItemCard, TraceView, ModeBadge
 lib/
   qloo/client.ts        transport (HTTP | mock), normaliser, traced QlooService
   qloo/params.ts        supported params per filter.type + sanitiser
   qloo/mock.ts          mock transport
   qloo/fixtures.ts      illustrative fixtures (NOT Qloo data)
-  agent/orchestrator.ts plans and runs the Qloo tool calls
+  agent/orchestrator.ts plans and runs the Qloo tool calls (incl. readLoved: domain inference for free text)
   agent/composer.ts     week plan + group session composition (Gemini or template)
   agent/gemini.ts       Gemini REST client
   agent/care.ts         era maths, care adaptations, sample residents
-  validate.ts           input validation
+  validate.ts           input validation, born/decade/age parsing, "Town, Country" splitting
 ```
 
 ## Licence

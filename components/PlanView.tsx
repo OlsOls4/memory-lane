@@ -19,7 +19,8 @@ export default function PlanView({ plan }: { plan: WeekPlan }) {
         <div>
           <p className="eyebrow">Weekly reminiscence plan</p>
           <h2>
-            {r.firstName}, born {r.birthYear}
+            {r.firstName || "Your resident"}, born {r.birthYearApprox ? "about " : ""}
+            {r.birthYear}
             {r.hometown ? ` · ${r.hometown}` : ""}
           </h2>
           <p className="muted">
@@ -31,6 +32,17 @@ export default function PlanView({ plan }: { plan: WeekPlan }) {
           Print this week
         </button>
       </header>
+
+      {plan.understood && plan.understood.length > 0 && (
+        <div className="understood no-print">
+          <p>
+            <strong>How Memory Lane read what you typed</strong> (via Qloo search):
+          </p>
+          {plan.understood.map((u) => (
+            <p key={u}>{u}</p>
+          ))}
+        </div>
+      )}
 
       {plan.warnings.length > 0 && (
         <div className="notice no-print">

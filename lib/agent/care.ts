@@ -108,3 +108,17 @@ export const SAMPLE_RESIDENTS: ResidentProfile[] = [
     constraints: { hearing: "significant", vision: "mild", dementiaStage: "advanced", softFoods: true, diabetic: true },
   },
 ];
+
+/** One-tap Quick start examples: the minimum a carer might know (born, where, one thing they loved). */
+export interface QuickInput {
+  firstName: string;
+  born: string; // "1946", "1940s" or "age 82"
+  place: string; // town, optionally ", Country"
+  loved: string;
+}
+
+export const QUICK_SAMPLES: QuickInput[] = [
+  { firstName: "Margaret", born: "1940s", place: "Liverpool", loved: "Cilla Black" },
+  { firstName: "Walter", born: "1938", place: "Chicago, USA", loved: "Frank Sinatra" },
+  { firstName: "Dorothy", born: "age 82", place: "Glasgow", loved: "afternoon tea" },
+];

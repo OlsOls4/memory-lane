@@ -137,3 +137,33 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--focus
   .item { break-inside: avoid; padding: 4pt 6pt; }
   h1, h2, h3, .eyebrow, h4 { color: #000; }
 }
+
+/* Quick start */
+.quick-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.8rem; }
+.quick-head .samples { margin-top: 0; }
+.quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem 1.2rem; margin-bottom: 1.2rem; }
+.quick-grid .wide { grid-column: 1 / -1; }
+.quick-grid label > span { display: flex; gap: 0.5rem; align-items: baseline; }
+.opt { font-style: normal; font-weight: 400; font-size: 0.8rem; color: var(--muted); }
+.hint.bad { color: #9b1c1c; }
+.country-line { display: flex; align-items: center; gap: 0.4rem; font-weight: 400; }
+.country-line select { min-height: 36px; padding: 0.2rem 0.5rem; font-size: 0.9rem; border-width: 1px; }
+.btn-big { width: 100%; font-size: 1.35rem; min-height: 68px; }
+.small { font-size: 0.85rem; margin: 0.9rem 0 0; }
+.btn-link.inline { padding: 0; font-size: inherit; font-weight: 600; }
+
+/* Sharpen panel */
+.sharpen { border-color: var(--gold); }
+.chip-row, .loved-row { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; margin: 0.7rem 0; }
+.chip { font: inherit; font-weight: 600; font-size: 0.95rem; min-height: 46px; padding: 0.35rem 1rem; border-radius: 999px; border: 2px solid var(--line); background: #fffdf9; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; }
+.chip.on { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+.chip.static { cursor: default; }
+.chip-x { background: none; border: 0; color: inherit; font-size: 1.2rem; cursor: pointer; padding: 0 0.1rem; line-height: 1; }
+.add-loved { display: inline-flex; gap: 0.4rem; align-items: center; }
+.add-loved input { min-height: 46px; }
+.sharpen-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin-top: 1rem; }
+.understood { background: #eef6f1; border-left: 6px solid var(--accent-2); padding: 0.6rem 1rem; border-radius: 8px; margin: 1rem 0; }
+.understood p { margin: 0.15rem 0; }
+
+/* Group quick add */
+.quick-add { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.8rem; align-items: end; margin: 1rem 0; }

@@ -87,7 +87,16 @@ function search(params: Record<string, string>) {
     .filter((h) => h.score > 0)
     .sort((a, b) => b.score - a.score || b.x.pop - a.x.pop)
     .map((h) => h.x);
-  if (!hits.length && q) {
+  // A cross-type search (Quick start domain inference) returns nothing for an unknown name, like a
+  // search with no good match would, so the agent falls back to reading it as a tag.
+  if (!hits.length && q && types.length === 1 && types[0] === "urn:entity:locality" && COUNTRY_ALIASES[q]) {
+    // A country used as the place anchor (Quick start with no town).
+    const id = `mock-gen-locality-${slug(q)}`;
+    const ent: FixtureEntity = { id, name: params.query.trim(), type: types[0], country: COUNTRY_ALIASES[q], tags: [], pop: 0.5 };
+    generated.set(id, ent);
+    hits.push(ent);
+  }
+  if (!hits.length && q && types.length <= 1) {
     // Unknown name: fabricate a clearly-mock entity so the flow continues.
     const type = types[0] || "urn:entity:artist";
     const id = `mock-gen-${type.split(":").pop()}-${slug(q)}`;
@@ -108,6 +117,8 @@ function tags(params: Record<string, string>) {
   const q = norm(params["filter.query"] || "");
   const take = parseInt(params.take || "3", 10);
   let found = TAGS.filter((tg) => tg.keywords.some((k) => norm(k).includes(q) || (q.length > 3 && q.includes(norm(k)))));
+  // Exact keyword matches first ("ballroom dancing" -> Dancing, not Music Venue).
+  found.sort((a, b) => Number(b.keywords.some((k) => norm(k) === q)) - Number(a.keywords.some((k) => norm(k) === q)));
   if (!found.length && q) {
     found = [{ id: `urn:tag:mock:keyword:${slug(q)}`, name: params["filter.query"].trim(), keywords: [q] }];
   }
@@ -142,7 +153,8 @@ function insights(params: Record<string, string>) {
   if (dobMin) pool = pool.filter((x) => !x.dob || x.dob >= dobMin);
   if (dobMax) pool = pool.filter((x) => !x.dob || x.dob <= dobMax);
   if (locQuery) {
-    const local = pool.filter((x) => x.city && norm(x.city) === locQuery);
+    const cc = COUNTRY_ALIASES[locQuery];
+    const local = pool.filter((x) => (x.city && norm(x.city) === locQuery) || (!!cc && x.country === cc));
     const anywhere = pool.filter((x) => !x.city);
     pool = local.length ? [...local, ...anywhere] : anywhere;
   }
