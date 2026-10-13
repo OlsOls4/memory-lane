@@ -213,19 +213,19 @@ async function geminiPolish(days: DayPlan[], ctx: ResidentContext): Promise<DayP
       day: d.day,
       theme: d.theme,
       durationMins: d.durationMins,
-      items: d.items.map((i) => ({ name: i.name, year: i.year, why: i.why })),
+      items: d.items.map((i) => ({ name: i.name, year: i.year })),
     })),
   };
   const prompt = `You write reminiscence activity plans for care-home activity staff in ${p.country}.
-Use warm, plain ${p.country === "United States" ? "American" : "British"} English. Write for staff, not the resident.
+Use warm, plain ${p.country === "United States" ? "American" : "British"} English. Write for staff, not the resident. This is a one-to-one plan for ONE resident (staff may invite others to join, but never write "the residents").
 For each day, write: title (max 8 words), intro (1-2 sentences), steps (3-5 short imperative steps that use ONLY the listed items by name; never invent other songs, films, shows, books or places), prompts (3 conversation prompts suited to dementia stage "${p.constraints.dementiaStage}": for moderate/advanced use recognition, yes/no or either/or questions).
 Never give medical advice. Return JSON: {"days":[{"day":"Monday","title":"","intro":"","steps":[""],"prompts":[""]}]} with exactly ${days.length} days in the same order.
 DATA:
 ${JSON.stringify(brief)}`;
   const out = await geminiJSON<{ days: { day: string; title: string; intro: string; steps: string[]; prompts: string[] }[] }>(prompt, 15000);
-  if (!out || !Array.isArray(out.days) || out.days.length !== days.length) return null;
+  if (!out || !Array.isArray(out.days) || out.days.length < Math.ceil(days.length / 2)) return null;
   return days.map((d, i) => {
-    const g = out.days[i];
+    const g = out.days.find((x) => x && String(x.day).toLowerCase() === d.day.toLowerCase()) || (out.days.length === days.length ? out.days[i] : undefined);
     const ok = g && typeof g.title === "string" && Array.isArray(g.steps) && Array.isArray(g.prompts);
     return ok
       ? {

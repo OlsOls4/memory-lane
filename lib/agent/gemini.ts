@@ -65,6 +65,8 @@ async function callOneCompat<T>(name: string, url: string, key: string, model: s
         ],
         response_format: { type: "json_object" },
         temperature: 0.6,
+        max_tokens: 4000,
+        ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
       }),
       signal: ctrl.signal,
       cache: "no-store",
