@@ -4,6 +4,8 @@ import { useState } from "react";
 import ResidentForm, { EMPTY_RESIDENT, cleanResident } from "@/components/ResidentForm";
 import ItemCard from "@/components/ItemCard";
 import TraceView from "@/components/TraceView";
+import AgentProgress from "@/components/AgentProgress";
+import { runAgent, type LiveStep } from "@/lib/agentClient";
 import TuningDial from "@/components/TuningDial";
 import { QUICK_SAMPLES, SAMPLE_RESIDENTS, eraFor } from "@/lib/agent/care";
 import { parseBirth, parseBornText } from "@/lib/validate";
@@ -14,6 +16,7 @@ export default function GroupPage() {
   const [draft, setDraft] = useState<ResidentProfile>(EMPTY_RESIDENT);
   const [session, setSession] = useState<GroupSession | null>(null);
   const [busy, setBusy] = useState(false);
+  const [steps, setSteps] = useState<LiveStep[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const [qa, setQa] = useState({ firstName: "", born: "", loved: "" });
@@ -58,13 +61,10 @@ export default function GroupPage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/group", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ residents }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "The session could not be planned. Check the residents above and try again.");
+      setSteps([]);
+      setSession(null);
+      setTimeout(() => document.getElementById("group-progress")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      const body = await runAgent<GroupSession>("/api/group", { residents }, setSteps);
       setSession(body);
     } catch (e: any) {
       setError(e.message);
@@ -222,6 +222,10 @@ export default function GroupPage() {
           {residents.length < 2 && <p className="hint ready-hint">Add at least two residents to plan a session.</p>}
         </div>
       </section>
+
+      <div id="group-progress">
+        {busy && <AgentProgress steps={steps} expected={residents.length * 13 + 6} title="Finding common ground" />}
+      </div>
 
       {session && (
         <section className="plan" aria-labelledby="session-h" aria-live="polite">

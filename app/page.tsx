@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import ResidentForm, { EMPTY_RESIDENT, cleanResident } from "@/components/ResidentForm";
+import AgentProgress from "@/components/AgentProgress";
+import { runAgent, type LiveStep } from "@/lib/agentClient";
 import PlanView from "@/components/PlanView";
 import QuickStart, { COUNTRIES } from "@/components/QuickStart";
 import SharpenPanel from "@/components/SharpenPanel";
@@ -41,6 +43,7 @@ export default function Home() {
   const [plan, setPlan] = useState<WeekPlan | null>(null);
   const [lastSent, setLastSent] = useState("");
   const [busy, setBusy] = useState(false);
+  const [steps, setSteps] = useState<LiveStep[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Sensible default country from the browser's language (en-US -> United States), editable inline.
@@ -61,14 +64,10 @@ export default function Home() {
     setError(null);
     const sent = JSON.stringify(body);
     try {
-      const res = await fetch("/api/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resident: body }),
-      });
-      const out = await res.json();
-      if (!res.ok) throw new Error(out.error || "The plan could not be made. Check the details above and try again.");
+      setSteps([]);
       const firstPlan = !plan;
+      if (firstPlan) setTimeout(() => document.getElementById("plan")?.scrollIntoView({ behavior: scrollBehaviour(), block: "start" }), 50);
+      const out = await runAgent<WeekPlan>("/api/plan", { resident: body }, setSteps);
       setPlan(out);
       setLastSent(sent);
       if (firstPlan) setTimeout(() => document.getElementById("plan")?.scrollIntoView({ behavior: scrollBehaviour() }), 50);
@@ -189,6 +188,7 @@ export default function Home() {
       )}
 
       <div id="plan">
+        {busy && <AgentProgress steps={steps} expected={16} title={plan ? "Updating the plan" : "Building the week"} compact={!!plan} />}
         {plan && (
           <PlanView
             plan={plan}

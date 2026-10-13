@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { streamAgent, wantsStream } from "@/lib/agentStream";
 import { buildWeekPlan } from "@/lib/agent/composer";
 import { parseResident } from "@/lib/validate";
 
@@ -21,6 +22,7 @@ export async function POST(req: Request) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 });
   }
+  if (wantsStream(req)) return streamAgent((onStep) => buildWeekPlan(resident, onStep), "Could not build the plan. Please try again.");
   try {
     const plan = await buildWeekPlan(resident);
     return NextResponse.json(plan, { headers: { "Cache-Control": "no-store" } });

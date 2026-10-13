@@ -149,16 +149,32 @@ export function normaliseEntity(raw: any, fallbackType = ""): QEntity {
 // Traced service used by the agent
 // ---------------------------------------------------------------------------
 
+/** Called as each agent step starts and finishes, so the UI can show live progress. */
+export type StepListener = (step: TraceStep, phase: "start" | "end") => void;
+
 export class QlooService {
   readonly trace: TraceStep[] = [];
-  constructor(private t: QlooTransport = createTransport()) {}
+  readonly startedAt = Date.now();
+  constructor(private t: QlooTransport = createTransport(), private onStep?: StepListener) {}
+
+  /** Append a finished step (used by the composer for wording steps). */
+  record(step: TraceStep) {
+    this.trace.push(step);
+    this.emit(step, "end");
+  }
+
+  private emit(step: TraceStep, phase: "start" | "end") {
+    try {
+      this.onStep?.(step, phase);
+    } catch {}
+  }
 
   get mock() {
     return this.t.mock;
   }
 
   note(tool: ToolName, purpose: string, summary: string[], extra: Partial<TraceStep> = {}) {
-    this.trace.push({ n: this.trace.length + 1, tool, purpose, summary, ms: 0, mock: this.t.mock, ...extra });
+    this.record({ n: this.trace.length + 1, tool, purpose, summary, ms: 0, mock: this.t.mock, ...extra });
   }
 
   private async call(
@@ -181,6 +197,7 @@ export class QlooService {
       mock: this.t.mock,
     };
     this.trace.push(step);
+    this.emit(step, "start");
     try {
       const body = await this.t.get(path, params);
       step.summary = summarise(body);
@@ -190,6 +207,7 @@ export class QlooService {
       return null;
     } finally {
       step.ms = Date.now() - started;
+      this.emit(step, "end");
     }
   }
 

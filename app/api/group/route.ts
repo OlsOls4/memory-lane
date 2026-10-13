@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { streamAgent, wantsStream } from "@/lib/agentStream";
 import { buildGroupSession } from "@/lib/agent/composer";
 import { parseResident } from "@/lib/validate";
 
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 });
   }
+  if (wantsStream(req)) return streamAgent((onStep) => buildGroupSession(residents, onStep), "Could not build the group session. Please try again.");
   try {
     const session = await buildGroupSession(residents);
     return NextResponse.json(session, { headers: { "Cache-Control": "no-store" } });

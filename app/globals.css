@@ -388,3 +388,47 @@ input[aria-invalid="true"] { border-color: var(--error); }
   .adapt { background: none; border: 1px solid #999; }
   .muted, .day-mins, .day-theme, .item-year { color: #333; }
 }
+
+/* ---- Live agent progress ---- */
+.agent-progress {
+  max-width: 52rem; margin: 1.5rem auto; background: var(--sheet); border: 2px solid var(--rule); border-radius: 18px;
+  padding: 1.25rem 1.4rem; box-shadow: 0 6px 24px rgba(23, 38, 58, 0.08);
+}
+.agent-progress-head { display: flex; gap: 0.9rem; align-items: center; }
+.agent-progress-head h2 { margin: 0; font-family: var(--display); font-size: 1.35rem; color: var(--navy); }
+.agent-progress-head p { margin: 0.15rem 0 0; }
+.agent-spinner {
+  width: 26px; height: 26px; flex: none; border-radius: 50%; border: 3px solid var(--duck-deep); border-top-color: var(--blue);
+  animation: agent-spin 0.9s linear infinite;
+}
+.agent-bar { height: 10px; border-radius: 99px; background: var(--duck); margin: 1rem 0 0.9rem; overflow: hidden; }
+.agent-bar span, .agent-pill-bar span {
+  display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--heather));
+  transition: width 0.4s ease;
+}
+.agent-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+.agent-step { display: grid; grid-template-columns: 1.5rem 1fr; gap: 0.5rem; align-items: start; line-height: 1.4; animation: agent-in 0.25s ease; }
+.agent-dot {
+  width: 1.35rem; height: 1.35rem; border-radius: 50%; display: grid; place-items: center; font-size: 0.8rem; font-weight: 700;
+  border: 2px solid var(--control); color: #fff; margin-top: 0.05rem;
+}
+.agent-step.done .agent-dot { background: #2f7a4f; border-color: #2f7a4f; }
+.agent-step.failed .agent-dot { background: var(--amber); border-color: var(--amber); color: var(--navy); }
+.agent-step.running .agent-dot { border-color: var(--blue); border-top-color: transparent; animation: agent-spin 0.9s linear infinite; }
+.agent-step-purpose { color: var(--navy); font-weight: 600; }
+.agent-step-result { color: var(--muted); }
+.agent-foot { margin: 0.9rem 0 0; }
+.agent-pill {
+  position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 0.6rem;
+  background: var(--navy); color: #fff; padding: 0.6rem 1rem; border-radius: 99px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  font-weight: 600; max-width: calc(100vw - 2rem);
+}
+.agent-pill .agent-spinner { width: 18px; height: 18px; border-width: 2px; border-color: rgba(255, 255, 255, 0.3); border-top-color: #fff; }
+.agent-pill-bar { width: 70px; height: 6px; border-radius: 99px; background: rgba(255, 255, 255, 0.2); overflow: hidden; flex: none; }
+@keyframes agent-spin { to { transform: rotate(360deg); } }
+@keyframes agent-in { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) {
+  .agent-spinner, .agent-step.running .agent-dot { animation-duration: 2.4s; }
+  .agent-step { animation: none; }
+  .agent-bar span, .agent-pill-bar span { transition: none; }
+}

@@ -3,7 +3,7 @@
 // template composer writes the wording instead, so the app runs with zero keys.
 
 import type { DayPlan, Domain, GroupSession, PlanItem, ResidentProfile, WeekPlan } from "../types";
-import { QlooService } from "../qloo/client";
+import { QlooService, type StepListener } from "../qloo/client";
 import { adaptationsFor, isUK } from "./care";
 import { gatherResident, toItem, type ResidentContext } from "./orchestrator";
 import { geminiEnabled, geminiJSON } from "./gemini";
@@ -238,8 +238,8 @@ ${JSON.stringify(brief)}`;
   });
 }
 
-export async function buildWeekPlan(profile: ResidentProfile): Promise<WeekPlan> {
-  const svc = new QlooService();
+export async function buildWeekPlan(profile: ResidentProfile, onStep?: StepListener): Promise<WeekPlan> {
+  const svc = new QlooService(undefined, onStep);
   const ctx = await gatherResident(svc, profile);
   let days = templateDays(ctx);
   let composer: WeekPlan["composer"] = "template";
@@ -250,7 +250,7 @@ export async function buildWeekPlan(profile: ResidentProfile): Promise<WeekPlan>
     if (polished) {
       days = polished;
       composer = "gemini";
-      svc.trace.push({
+      svc.record({
         n: svc.trace.length + 1,
         tool: "llm.compose",
         purpose: "Gemini writes the wording around the Qloo-chosen items",
@@ -259,7 +259,7 @@ export async function buildWeekPlan(profile: ResidentProfile): Promise<WeekPlan>
         mock: false,
       });
     } else {
-      svc.trace.push({
+      svc.record({
         n: svc.trace.length + 1,
         tool: "template.compose",
         purpose: "Gemini failed or returned invalid JSON; fell back to the template composer",
@@ -300,8 +300,8 @@ export async function buildWeekPlan(profile: ResidentProfile): Promise<WeekPlan>
 // Group session
 // ---------------------------------------------------------------------------
 
-export async function buildGroupSession(residents: ResidentProfile[]): Promise<GroupSession> {
-  const svc = new QlooService();
+export async function buildGroupSession(residents: ResidentProfile[], onStep?: StepListener): Promise<GroupSession> {
+  const svc = new QlooService(undefined, onStep);
   const group = residents.slice(0, 6);
   svc.note("agent.plan", `Group session for ${group.map((r) => r.firstName).join(", ")}`, [
     "Resolve each resident's favourites and run music/film/TV insights individually",
@@ -390,7 +390,7 @@ export async function buildGroupSession(residents: ResidentProfile[]): Promise<G
       domain,
       year: e.year,
       affinity: e.affinity,
-      why: `Blended Qloo signals from all ${group.length} residents${e.year ? `; from ${e.year}` : ""}. Likely to land with ${who.join(", ") || "the group"}.`,
+      why: `Blended Qloo signals from all ${group.length} residents${e.year && !/artist|person/.test(e.type) ? `; from ${e.year}` : ""}. Likely to land with ${who.join(", ") || "the group"}.`,
       signals,
       appealsTo: who,
     };
@@ -444,7 +444,7 @@ Return JSON {"outline":[{"minutes":5,"segment":"","detail":""}],"prompts":[""]} 
       outline = out.outline.slice(0, 6).map((o) => ({ minutes: Number(o.minutes) || 5, segment: String(o.segment), detail: String(o.detail) }));
       prompts = out.prompts.map(String).slice(0, 5);
       composer = "gemini";
-      svc.trace.push({ n: svc.trace.length + 1, tool: "llm.compose", purpose: "Gemini writes the session outline around Qloo picks", summary: ["outline + prompts"], ms: Date.now() - started, mock: false });
+      svc.record({ n: svc.trace.length + 1, tool: "llm.compose", purpose: "Gemini writes the session outline around Qloo picks", summary: ["outline + prompts"], ms: Date.now() - started, mock: false });
     }
   }
   if (composer === "template") svc.note("template.compose", "Template composer wrote the group outline", ["picks and shared themes come from Qloo"]);
