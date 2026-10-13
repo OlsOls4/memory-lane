@@ -6,7 +6,7 @@ import type { DayPlan, Domain, GroupSession, PlanItem, ResidentProfile, WeekPlan
 import { QlooService, type StepListener } from "../qloo/client";
 import { adaptationsFor, isUK } from "./care";
 import { gatherResident, toItem, type ResidentContext } from "./orchestrator";
-import { geminiEnabled, geminiJSON } from "./gemini";
+import { geminiEnabled, geminiJSON, geminiModel, lastGeminiError } from "./gemini";
 import { planFromStory, reviewCandidates } from "./llmAgent";
 import { displayName } from "../validate";
 
@@ -222,7 +222,7 @@ For each day, write: title (max 8 words), intro (1-2 sentences), steps (3-5 shor
 Never give medical advice. Return JSON: {"days":[{"day":"Monday","title":"","intro":"","steps":[""],"prompts":[""]}]} with exactly ${days.length} days in the same order.
 DATA:
 ${JSON.stringify(brief)}`;
-  const out = await geminiJSON<{ days: { day: string; title: string; intro: string; steps: string[]; prompts: string[] }[] }>(prompt);
+  const out = await geminiJSON<{ days: { day: string; title: string; intro: string; steps: string[]; prompts: string[] }[] }>(prompt, 15000);
   if (!out || !Array.isArray(out.days) || out.days.length !== days.length) return null;
   return days.map((d, i) => {
     const g = out.days[i];
@@ -281,14 +281,20 @@ async function applyStory(svc: QlooService, profile: ResidentProfile): Promise<R
 
 /** Care-aware critic: removes unsuitable Qloo candidates; the plan then backfills from the remaining Qloo results. */
 async function applyReview(svc: QlooService, ctx: ResidentContext) {
+  const domains: Domain[] = ["music", "film", "tv", "books", "food", "travel"];
+  // Deterministic era guard (always on): no film, TV or book dated 20+ years after their formative years.
+  const late = ctx.era.formativeEnd + 20;
+  for (const d of ["film", "tv", "books"] as Domain[]) {
+    const kept = ctx.results[d].filter((e) => !e.year || e.year <= late);
+    if (kept.length >= 2) ctx.results[d] = kept;
+  }
   if (!geminiEnabled()) return;
   const started = Date.now();
-  const domains: Domain[] = ["music", "film", "tv", "books", "food", "travel"];
   const subset = Object.fromEntries(domains.map((d) => [d, ctx.results[d]]));
   const r = await reviewCandidates(ctx.profile, ctx.era, subset).catch(() => null);
   const ms = Date.now() - started;
   if (!r) {
-    svc.record({ n: svc.trace.length + 1, tool: "llm.review", purpose: "AI care review of Qloo's candidates", summary: ["Review unavailable; Qloo order kept"], ms, mock: false, error: "review unavailable" });
+    svc.record({ n: svc.trace.length + 1, tool: "llm.review", purpose: "AI care review of Qloo's candidates", summary: ["Review unavailable; Qloo order kept"], ms, mock: false, error: `review unavailable: ${lastGeminiError.slice(-160)}` });
     return;
   }
   const drop = new Set(r.drop.map((d) => d.id));
@@ -326,7 +332,7 @@ export async function buildWeekPlan(input: ResidentProfile, onStep?: StepListene
         n: svc.trace.length + 1,
         tool: "llm.compose",
         purpose: "Gemini writes the wording around the Qloo-chosen items",
-        summary: ["7 days rewritten; items untouched", `model ${process.env.GEMINI_MODEL || "gemini-2.5-flash"}`],
+        summary: ["7 days rewritten; items untouched", `model ${geminiModel()}`],
         ms: Date.now() - started,
         mock: false,
       });

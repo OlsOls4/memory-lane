@@ -29,23 +29,29 @@ Decide what to look up in a cultural taste database (Qloo). Extract only what th
 - foods: dishes or food memories as short names ("fish and chips")
 - hobbies: activities as short Qloo-style tags ("ballroom dancing", "gardening", "football")
 - hometown/country only if stated and different from above; birthYear only if stated
-- constraints: only care needs stated (soft foods, diabetic, hearing, vision, dementia stage)
+- constraints: only care needs stated, as {"softFoods":true,"diabetic":true,"hearing":"mild|significant","vision":"mild|significant","dementiaStage":"early|moderate|advanced"}; omit keys not stated ("hard of hearing" = hearing "mild")
 - rationale: up to 4 short lines saying what you will look up and why, e.g. "Danced at the Locarno → ballroom dancing tag, big-band artists"
 Never include names of people who are not public figures. Return JSON:
 {"favourites":{"artists":[],"films":[],"tvShows":[],"books":[],"foods":[],"hobbies":[]},"hometown":"","country":"","birthYear":null,"constraints":{},"rationale":[]}`;
-  const out = await geminiJSON<any>(prompt, 20000);
+  const out = await geminiJSON<any>(prompt, 15000);
   if (!out || typeof out !== "object") return null;
   const f = out.favourites || {};
   const c = out.constraints || {};
-  const lvl = (v: any) => (v === "mild" || v === "significant" ? v : undefined);
-  const stage = ["early", "moderate", "advanced"].includes(c.dementiaStage) ? c.dementiaStage : undefined;
+  const yes = (v: any) => v === true || (typeof v === "string" && /^(true|yes)/i.test(v.trim()));
+  const lvl = (v: any) => {
+    if (v === undefined || v === null || v === false || v === "none" || v === "") return undefined;
+    const t = String(v).toLowerCase();
+    return /significant|severe|profound|deaf|blind/.test(t) ? "significant" : "mild";
+  };
+  const stageText = String(c.dementiaStage || "").toLowerCase();
+  const stage = (["early", "moderate", "advanced"] as const).find((x) => stageText.includes(x));
   const by = Number(out.birthYear);
   return {
     favourites: { artists: arr(f.artists, 3), films: arr(f.films, 3), tvShows: arr(f.tvShows, 3), books: arr(f.books, 3), foods: arr(f.foods, 3), hobbies: arr(f.hobbies, 4) },
     hometown: typeof out.hometown === "string" && out.hometown.trim() ? out.hometown.trim().slice(0, 60) : undefined,
     country: typeof out.country === "string" && out.country.trim() ? out.country.trim().slice(0, 60) : undefined,
     birthYear: by > 1900 && by < 2010 ? by : undefined,
-    constraints: { softFoods: c.softFoods === true || undefined, diabetic: c.diabetic === true || undefined, hearing: lvl(c.hearing), vision: lvl(c.vision), dementiaStage: stage },
+    constraints: { softFoods: yes(c.softFoods) || undefined, diabetic: yes(c.diabetic) || undefined, hearing: lvl(c.hearing), vision: lvl(c.vision), dementiaStage: stage },
     rationale: arr(out.rationale, 4),
   };
 }
@@ -69,11 +75,16 @@ Remove a candidate ONLY if it is clearly unsuitable for a reminiscence session w
 Keep everything else; most candidates should be kept. Return JSON {"drop":[{"id":"","reason":"under 12 words"}]}.
 CANDIDATES:
 ${JSON.stringify(list)}`;
-  const out = await geminiJSON<any>(prompt, 20000);
+  const out = await geminiJSON<any>(prompt, 15000);
+  if (Array.isArray(out)) return reviewFrom(out, list);
   if (!out || !Array.isArray(out.drop)) return null;
+  return reviewFrom(out.drop, list);
+}
+
+function reviewFrom(drops: any[], list: { id: string; name: string }[]): Review {
   const byId = new Map(list.map((x) => [x.id, x]));
   return {
-    drop: out.drop
+    drop: drops
       .filter((d: any) => d && byId.has(String(d.id)))
       .slice(0, 12)
       .map((d: any) => ({ id: String(d.id), name: byId.get(String(d.id))!.name, reason: String(d.reason || "unsuitable").slice(0, 100) })),
@@ -91,7 +102,7 @@ export async function aiOnlyPicks(p: ResidentProfile): Promise<AiOnlyPick[] | nu
   const prompt = `Suggest reminiscence material for a care-home resident born about ${p.birthYear}, who grew up in ${p.hometown ? `${p.hometown}, ` : ""}${p.country} and loved ${loved || "music"}.
 Give 4 music artists, 3 films, 3 TV shows, 3 local places to eat in their hometown, and 3 places to visit, each with the year it was released or first famous where relevant.
 Return JSON {"picks":[{"domain":"music|film|tv|food|travel","name":"","year":1960}]}.`;
-  const out = await geminiJSON<any>(prompt, 20000);
+  const out = await geminiJSON<any>(prompt, 25000);
   if (!out || !Array.isArray(out.picks)) return null;
   const ok = new Set(["music", "film", "tv", "food", "travel"]);
   return out.picks
