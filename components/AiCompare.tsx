@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { AiComparison, CheckedPick } from "@/lib/agent/compareAi";
 import type { WeekPlan } from "@/lib/types";
 
-const LABEL: Record<CheckedPick["status"], string> = { verified: "Checks out", "wrong-era": "Wrong years", "not-found": "Not found" };
+const LABEL: Record<CheckedPick["status"], string> = { verified: "Checks out", "wrong-era": "Wrong years", "not-found": "Can’t verify" };
 const DOMAIN: Record<string, string> = { music: "Music", film: "Film", tv: "TV", food: "Places to eat", travel: "Places" };
 
 /** Side-by-side: what an AI alone suggests vs the Qloo-grounded plan. Shown only when Gemini is configured. */
@@ -63,7 +63,7 @@ export default function AiCompare({ plan }: { plan: WeekPlan }) {
             </div>
             <div className={`ai-score ${bad ? "ai-score-bad" : ""}`}>
               <b>{out.counts.verified}/{out.picks.length}</b>
-              <span>AI-only picks check out{bad ? `; ${bad} wrong-era or not found` : ""}</span>
+              <span>AI-only picks check out{bad ? `; ${bad} wrong-era or unverifiable` : ""}</span>
             </div>
           </div>
           <ul className="ai-picks">
@@ -79,7 +79,7 @@ export default function AiCompare({ plan }: { plan: WeekPlan }) {
               </li>
             ))}
           </ul>
-          <p className="muted small">An AI on its own often suggests the obvious hits, gets dates wrong or makes up places. Memory Lane only uses what Qloo’s graph confirms.</p>
+          <p className="muted small">An AI on its own guesses from memory: it leans on the obvious hits, can misdate things and can’t show why a pick suits this person. Memory Lane only uses what Qloo’s graph returns, with the signal behind each pick.</p>
         </>
       )}
     </section>

@@ -38,10 +38,11 @@ export async function compareWithAiOnly(profile: ResidentProfile, onStep?: StepL
   const checked = await Promise.all(
     picks.map(async (p): Promise<CheckedPick> => {
       const local = p.domain === "food" && profile.hometown ? `${p.name} ${profile.hometown}` : p.name;
-      const res = await svc.search(local, [TYPES[p.domain]], `Check the AI-only pick "${p.name}" exists in Qloo`, 3);
+      const types = p.domain === "travel" ? [TYPES.travel, "urn:entity:place"] : [TYPES[p.domain]];
+      const res = await svc.search(local, types, `Check the AI-only pick "${p.name}" exists in Qloo`, 3);
       const want = norm(p.name);
       const hit = res.find((e) => norm(e.name) === want) || res.find((e) => norm(e.name).includes(want) || want.includes(norm(e.name)));
-      if (!hit) return { ...p, status: "not-found", note: p.domain === "food" ? "No such place found in Qloo" : "Not found in Qloo's graph" };
+      if (!hit) return { ...p, status: "not-found", note: p.domain === "food" ? "Couldn't be matched to a real place in Qloo" : "Couldn't be matched in Qloo's graph" };
       if ((p.domain === "film" || p.domain === "tv") && hit.year && (hit.year < lo || hit.year > hi))
         return { ...p, status: "wrong-era", qlooName: hit.name, note: `Qloo dates it ${hit.year}, outside ${era.formativeStart}–${era.formativeEnd}` };
       if ((p.domain === "film" || p.domain === "tv") && p.year && hit.year && Math.abs(p.year - hit.year) > 2)
