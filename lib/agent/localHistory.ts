@@ -40,7 +40,10 @@ export async function localHistory(svc: QlooService, p: ResidentProfile, era: { 
   if (!tavilyEnabled() || !p.hometown.trim()) return [];
   const d1 = Math.floor(era.formativeStart / 10) * 10;
   const d2 = Math.floor(era.formativeEnd / 10) * 10;
-  const decades = d1 === d2 ? `${d1}s` : `${d1}s and ${d2}s`;
+  // Every decade in the memory years (1956-1971 -> "1950s, 1960s and 1970s"), not just the ends.
+  const ds: string[] = [];
+  for (let d = d1; d <= d2; d += 10) ds.push(`${d}s`);
+  const decades = ds.length > 1 ? `${ds.slice(0, -1).join(", ")} and ${ds[ds.length - 1]}` : ds[0];
   const town = p.hometown.split(",")[0].trim();
   const query = `${town} ${p.country} local history ${decades} memories events`;
   const step = svc.begin("web.history", `Tavily web search: local history of ${town} in the ${decades}`, {
@@ -57,7 +60,7 @@ export async function localHistory(svc: QlooService, p: ResidentProfile, era: { 
       const r = await nemotronJSON<any>(
         "reader",
         `From these web results about ${town} in the ${decades}, pick up to 3 events, places or everyday things a person who grew up there then might remember (e.g. a new shopping arcade, a famous match, the trams, a flood, a royal visit).
-Only use facts stated in the results. Skip anything distressing (disasters with deaths, wars, crimes). For each: title (max 8 words), detail (one sentence a carer can say, max 25 words), year if stated, source (the result number).
+Only use facts stated in the results. Prefer everyday life, entertainment, music venues, shops, transport, sport and celebrations. Skip anything distressing or divisive (disasters with deaths, wars, crimes, riots, politics and elections, demolitions or communities displaced). For each: title (max 8 words), detail (one sentence a carer can say, max 25 words), year if stated, source (the result number).
 Return JSON {"hooks":[{"title":"","detail":"","year":null,"source":1}]}.
 RESULTS:
 ${results.map((x, i) => `[${i + 1}] ${x.title} — ${x.content}`).join("\n")}`,
