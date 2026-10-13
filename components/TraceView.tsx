@@ -1,6 +1,7 @@
 "use client";
 
 import type { TraceStep } from "@/lib/types";
+import { shortModel } from "@/lib/nemotron/names";
 
 const LABEL: Record<string, string> = {
   "agent.plan": "Planner",
@@ -8,9 +9,14 @@ const LABEL: Record<string, string> = {
   "qloo.tags": "Qloo tags",
   "qloo.insights": "Qloo insights",
   "qloo.compare": "Qloo compare",
-  "llm.plan": "AI planner",
-  "llm.review": "AI care review",
-  "llm.compose": "Gemini wording",
+  "llm.read": "Nemotron notes reader",
+  "llm.plan": "Nemotron planner",
+  "llm.tool": "Planner tool call",
+  "llm.review": "Nemotron care review",
+  "llm.compose": "Nemotron wording",
+  "llm.prompts": "Nemotron prompts",
+  "llm.feedback": "Nemotron feedback loop",
+  "web.history": "Local history (Tavily)",
   "template.compose": "Template wording",
 };
 
@@ -21,11 +27,12 @@ const ENDPOINTS: { tool: string; label: string; what: string }[] = [
   { tool: "qloo.compare", label: "Compare", what: "to find shared tastes" },
 ];
 
-export default function TraceView({ trace, composer }: { trace: TraceStep[]; composer?: "gemini" | "template" }) {
+export default function TraceView({ trace, composer }: { trace: TraceStep[]; composer?: "nemotron" | "template" }) {
   const qloo = trace.filter((t) => t.tool.startsWith("qloo."));
   const mock = trace.some((t) => t.mock);
   const used = ENDPOINTS.map((e) => ({ ...e, n: trace.filter((t) => t.tool === e.tool).length })).filter((e) => e.n > 0);
   const ms = qloo.reduce((a, t) => a + (t.ms || 0), 0);
+  const llm = trace.filter((t) => t.model);
   return (
     <details className="trace no-print">
       <summary>
@@ -34,7 +41,8 @@ export default function TraceView({ trace, composer }: { trace: TraceStep[]; com
           <span className="trace-sub">
             {qloo.length} calls to Qloo’s taste graph{ms > 0 ? ` in ${(ms / 1000).toFixed(1)} seconds` : ""}
             {mock ? ", using demo data" : ""}
-            {composer ? `. Wording by ${composer === "gemini" ? "Gemini" : "templates"}.` : "."}
+            {llm.length ? `, ${llm.length} NVIDIA Nemotron calls on Nebius Token Factory` : ""}
+            {composer ? `. Wording by ${composer === "nemotron" ? "Nemotron" : "templates"}.` : "."}
           </span>
         </span>
         <span className="trace-pills" aria-hidden="true">
@@ -53,7 +61,9 @@ export default function TraceView({ trace, composer }: { trace: TraceStep[]; com
             <li key={t.n} className={`step step-${kind}${t.error ? " step-error" : ""}`}>
               <div className="step-head">
                 <span className="step-tool">{LABEL[t.tool] || t.tool}</span>
+                {t.model && <span className="model-chip" title={t.model}>{shortModel(t.model)}</span>}
                 {t.ms > 0 && <span className="step-ms">{t.ms} ms</span>}
+                {t.reasoningTokens ? <span className="step-ms">{t.reasoningTokens.toLocaleString()} reasoning tokens</span> : null}
               </div>
               <p className="step-purpose">{t.purpose}</p>
               {t.request && (

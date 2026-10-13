@@ -1,6 +1,7 @@
 # Memory Lane
 
-**Personalised, culturally grounded reminiscence plans for care-home residents, powered by Qloo's taste graph.**
+**Personalised, culturally grounded reminiscence plans for care-home residents, powered by Qloo's taste graph and
+NVIDIA Nemotron on Nebius Token Factory.**
 
 Activity coordinators in UK and US care homes run reminiscence sessions every week. Most use the same generic
 "1950s playlist" for everyone. Memory Lane is an agent that builds a **one-week plan of activities** matched to a
@@ -11,8 +12,10 @@ common ground between several residents.
 (a year, a decade or an age), where they grew up (optional), and **one thing they loved**, in any domain. The agent works
 out whether that is a singer, a film, a TV show, a food or a pastime through Qloo, and makes a full week from it.
 
-> Built for the [Qloo Agentic Hackathon](https://qloo.devpost.com/). The live demo runs on the real Qloo hackathon API.
-> Without a key it still runs end to end in mock mode; Gemini wording is optional.
+> Originally built for the [Qloo Agentic Hackathon](https://qloo.devpost.com/) (that submission lives on `main`).
+> **This `nebius-nemotron` branch is the Nebius x NVIDIA hackathon build**: an NVIDIA Nemotron planning and writing
+> layer on Nebius Token Factory (see [below](#nvidia-nemotron-on-nebius-token-factory-nebius-nemotron-branch)).
+> Without any keys it still runs end to end in mock + template mode.
 
 ## What it does
 
@@ -72,14 +75,16 @@ the shared era block is visibly removed from the artist and podcast calls, which
 profile ─▶ agent.plan ─▶ Phase 1: resolve (search + tags, in parallel)
                         ─▶ Phase 2: insights per domain (in parallel, era/age/country filters per type)
                         ─▶ Phase 3: verify (performer birth-date era check, re-rank, recovery on empty results)
-                        ─▶ compose: items are picked by code from Qloo results;
-                                    Gemini (optional) writes only the wording around them;
-                                    template composer if there's no key or Gemini fails
+                        ─▶ guards: era, "steer clear of" keywords, wrong-era favourite matches, last week's misses
+                        ─▶ plan: Nemotron 3 Ultra picks, orders and flags from Qloo's candidates,
+                                 calling back into Qloo (search / more insights) when a theme runs thin
+                        ─▶ write: Nemotron 3 Super (days) ‖ Nemotron 3 Nano (prompts + follow-ups), in parallel
+                        ─▶ (optional) feedback loop: "how did it go" → Nemotron 3 Super → next week's build
 ```
 
-The LLM never picks items. It gets the Qloo-chosen items and writes titles, steps and prompts suited to the dementia
-stage, with instructions to use only the listed items by name. This keeps every recommendation grounded in Qloo and
-keeps the app working with no LLM at all.
+Nemotron never invents items: it chooses among Qloo entities (by alias) and writes around them. With no
+`NEBIUS_API_KEY`, or if any Nemotron call fails, the deterministic order and the template composer do that job, so the
+app always works with no LLM at all.
 
 ## Use it from any AI agent (MCP)
 
@@ -91,17 +96,70 @@ Memory Lane is also a remote MCP server at `https://memory-lane-azure-six.vercel
 
 Add it in Claude (Settings → Connectors → Add custom connector) or any MCP client with `{"mcpServers":{"memory-lane":{"url":"https://memory-lane-azure-six.vercel.app/api/mcp"}}}`. See `/agents` in the app.
 
-## AI steps (optional, with `GEMINI_API_KEY`)
+## NVIDIA Nemotron on Nebius Token Factory (`nebius-nemotron` branch)
 
-When a Gemini key is set, three LLM steps join the agent loop. None of them can add an item that did not come from Qloo:
+> This branch is the **Nebius x NVIDIA hackathon** build. It replaces the optional Gemini layer with a substantial
+> **NVIDIA Nemotron** layer served by **[Nebius Token Factory](https://tokenfactory.nebius.com/)** (OpenAI-compatible
+> API, `https://api.tokenfactory.nebius.com/v1`). Qloo still supplies every item; Nemotron decides which of them suit
+> this person, in what order, why, what to leave out, how to talk about them, and how next week should change.
 
-1. **AI planner** (`llm.plan`): reads a few lines of staff notes ("danced at the Mecca ballroom, loved Dusty Springfield, soft foods now") and decides what to look up in Qloo: artists, titles, hobby and food tags, care flags. The notes go to Gemini only, never to Qloo.
-2. **AI care review** (`llm.review`): a critic checks Qloo's candidates for this resident and removes anything distressing (psychiatric hospitals, graphic war, horror) or from the wrong era. The plan backfills from the remaining Qloo results.
-3. **Wording** (`llm.compose`): writes the steps and prompts around the Qloo-chosen items.
+### Which model does what
 
-**With vs without Qloo** (`/api/compare-ai`): asks Gemini for picks with no Qloo access, then checks every one against Qloo (`/search`) for existence and era. The plan page shows the score side by side.
+| Step (trace label) | Model | Reasoning | What it does |
+|---|---|---|---|
+| **Planner** (`llm.plan`) | `nvidia/Nemotron-3-Ultra-550b-a55b` | **on** | Agentic loop with OpenAI-style tool calls. Reads the resident's profile (no name) and Qloo's candidates, then picks and orders the week, writes a "why this will land" line per item, and flags candidates that clash with their sensitivities. Tools: `qloo_search` (check one title in Qloo, era-checked), `qloo_more` (one more era-filtered `/v2/insights` for a thin theme), `submit_week`. Falls back to Super, then to the deterministic order. |
+| **Notes reader** (`llm.read`) | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | off | Reads staff's free-text notes and decides what to look up in Qloo (artists, titles, hobby/food tags, care flags, things to avoid). The notes never go to Qloo. |
+| **Wording** (`llm.compose`) | `nvidia/nemotron-3-super-120b-a12b` | off | Titles, intros and steps for the 7 days, and the group running order. Uses only the chosen items by name. |
+| **Prompts** (`llm.prompts`) | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | off | 3 conversation prompts and 2 "if they light up" follow-ups per day, matched to dementia stage. Runs in parallel with the wording. |
+| **Feedback loop** (`llm.feedback`) | `nvidia/nemotron-3-super-120b-a12b` | **on** (short) | Staff tap *Loved it / Some of it / Didn't land* (plus a note) on each day. Super decides what to keep, what to drop, new favourites mentioned in the notes ("hummed Moon River") and new things to avoid; the next build re-resolves those in Qloo and the planner gets the summary. |
+| **Session script** (`/api/script`) | `nvidia/Nemotron-3_5-Lightning` | off | On demand, a word-for-word script for one day so agency or new staff can run it. |
+| **Care review** (`llm.review`) | `nvidia/nemotron-3-super-120b-a12b` | off | Fallback critic, only if the Ultra planner is unavailable. |
+| **AI-only comparison** (`/api/compare-ai`) | `nvidia/nemotron-3-super-120b-a12b` | off | What Nemotron suggests with no Qloo access, each pick checked against Qloo. |
+| **Local history** (`web.history`, optional) | Tavily search + Nano | off | With `TAVILY_API_KEY`: local history of their hometown in their decades, turned into 2–3 sourced conversation hooks on the travel day. Skipped silently without a key. |
 
-Without a key everything still works, with template wording and no AI steps.
+Every model can be swapped with an env var (`NEMOTRON_PLANNER_MODEL`, `NEMOTRON_WRITER_MODEL`, `NEMOTRON_PROMPTS_MODEL`,
+`NEMOTRON_READER_MODEL`, `NEMOTRON_FEEDBACK_MODEL`, `NEMOTRON_SCRIPT_MODEL`), and each role has a fallback chain
+(e.g. Ultra → Super). The UI shows a subtle *Powered by NVIDIA Nemotron on Nebius Token Factory* strip with one badge
+per model actually used (time, reasoning tokens, tool calls), the planner's one-line strategy, a model chip on every
+Nemotron step in the trace, and a **Left out for them** list with the reason for each flag.
+
+### Reasoning control
+
+All four Nemotron 3 models are reasoning models: by default they spend completion tokens on a hidden reasoning trace
+(`message.reasoning_content`) before answering. `lib/nemotron/client.ts` only ever reads `message.content` and
+`tool_calls`, and switches reasoning per call with `chat_template_kwargs: {"enable_thinking": false|true}`
+(verified on Token Factory for all four models; `/no_think` and `reasoning_effort` did **not** turn it off).
+Fast calls run with reasoning off; the planner's first turn and the feedback reader run with it on and a generous
+`max_tokens`. JSON calls use `response_format: {"type":"json_object"}` plus a tolerant parser.
+
+### Grounding and safety
+
+- The planner sees candidates as short aliases (`m1`, `f2`, …) and only aliases from Qloo results or its own Qloo tool
+  results are accepted, so it cannot invent an item. Wording steps are told to use only the listed names.
+- A deterministic **safety guard** always runs, with or without Nemotron: an era guard, a whole-word keyword guard on
+  names and Qloo tags for anything staff asked to steer clear of ("war films" also catches wartime, battle, military…),
+  removal of favourites that Qloo matched to a title from the wrong decades, and removal of last week's misses.
+- Nemotron never receives a surname or address. The planner gets no name at all; wording steps get the first name only.
+  Qloo still never receives names, notes or feedback text, only taste items, a decade window and a place.
+
+### Measured latency (live Token Factory + live Qloo, October 2026)
+
+| Call | Model | Median (range) |
+|---|---|---|
+| Planner, first turn (reasoning on, ~2.6–4.3k reasoning tokens) | Nemotron 3 Ultra | 11.5 s (9.7–19.6 s) |
+| Planner, submit turn after tool results | Nemotron 3 Ultra | 9.2 s (1.6–15.6 s) |
+| Planner total per plan (1–2 turns, 0–3 Qloo tool calls) | Nemotron 3 Ultra | 17–26 s |
+| Wording, 7 days | Nemotron 3 Super | 3.5 s (3.3–4.8 s) |
+| Prompts + follow-ups, 7 days | Nemotron 3 Nano | 3.7 s (2.8–6.0 s) |
+| Notes reader | Nemotron 3 Nano | 1.7 s (1.5–2.0 s) |
+| Feedback reader (reasoning on) | Nemotron 3 Super | 6.9 s (6.8–7.0 s) |
+| Group running order | Nemotron 3 Super | 4.4 s |
+| Session script | Nemotron 3.5 Lightning | 2.0 s |
+| Tiny JSON ping, reasoning off | Ultra / Super / Nano / Lightning | 1.0 / 0.9 / 0.65 / 0.66 s |
+
+A whole week takes 34–44 s end to end with live Qloo (Qloo phases run in parallel and take most of the rest), and
+about 0.1 s in mock + template mode. `GET /api/status?probe=1` pings every model; `GET /api/status?latency=1` returns
+the last 50 Nemotron calls with timings.
 
 ## Run it locally
 
@@ -129,7 +187,16 @@ curl -s -X POST http://localhost:3000/api/plan -H 'content-type: application/jso
        "favourites":{"artists":["Cilla Black","The Beatles"],"films":["The Sound of Music"],"tvShows":["Coronation Street"],
        "foods":["fish and chips"],"hobbies":["dancing"]},
        "constraints":{"hearing":"mild","dementiaStage":"moderate","softFoods":true}}}'
-curl -s http://localhost:3000/api/status    # {"qloo":"mock"|"live","composer":"template"|"gemini"}
+curl -s http://localhost:3000/api/status    # {"qloo":"mock"|"live","composer":"template"|"nemotron","llm":{...roles},"tavily":false}
+curl -s 'http://localhost:3000/api/status?probe=1'   # one tiny call per Nemotron model, with latency
+# Adapt next week from last week's feedback:
+curl -s -X POST http://localhost:3000/api/plan -H 'content-type: application/json' \
+  -d '{"resident":{"birthYear":1941,"hometown":"Leeds","loved":"Dusty Springfield","constraints":{"avoid":"war films"}},
+       "feedback":[{"day":"Monday","domain":"music","items":["Dusty Springfield"],"reaction":"loved","note":"hummed Moon River after"},
+                   {"day":"Tuesday","domain":"film","items":["Help!"],"reaction":"no"}]}'
+# Word-for-word script for one day (send a day from a plan):
+curl -s -X POST http://localhost:3000/api/script -H 'content-type: application/json' \
+  -d '{"day":{"day":"Monday","title":"Hit parade","theme":"Songs of my youth","durationMins":30,"steps":["Play Dusty Springfield"],"prompts":["Do you know this one?"],"items":[{"name":"Dusty Springfield"}]},"resident":{"firstName":"Jean","constraints":{"dementiaStage":"moderate"}}}'
 ```
 
 `/api/plan` accepts `birthYear`, `birthDecade` (`"1940s"`) or `age`; `firstName`, `hometown`, `country` and
@@ -142,10 +209,14 @@ domain alongside the typed `favourites.artists / films / tvShows / books / foods
 |---|---|---|
 | `QLOO_API_KEY` | No | Qloo hackathon key, sent as `X-Api-Key`. **If it's set, the app uses the live API. If not, it uses the mock fixtures.** |
 | `QLOO_BASE_URL` | No | Defaults to `https://hackathon.api.qloo.com` (hackathon keys only work there). |
-| `GEMINI_API_KEY` | No | Enables Gemini for the wording layer. |
-| `GEMINI_MODEL` | No | Defaults to `gemini-2.5-flash`. |
+| `NEBIUS_API_KEY` | No | Nebius Token Factory key (Bearer). Enables the NVIDIA Nemotron layer. Without it: deterministic planner + template wording. |
+| `NEBIUS_BASE_URL` | No | Defaults to `https://api.tokenfactory.nebius.com/v1`. |
+| `NEMOTRON` | No | Set to `off` to force template mode even when a key is present (handy for demos). |
+| `NEMOTRON_PLANNER_MODEL` … `NEMOTRON_SCRIPT_MODEL` | No | Override the model per role (planner, writer, prompts, reader, feedback, script). |
+| `NEMOTRON_PLANNER_BUDGET_MS` | No | Time budget for the Ultra planner loop (default 60000). |
+| `TAVILY_API_KEY` | No | Optional runtime web search for local hometown history. Skipped when absent. |
 
-All keys stay on the server. Only `app/api/*` routes call Qloo or Gemini, and the browser never sees a key.
+All keys stay on the server. Only `app/api/*` routes call Qloo, Nebius or Tavily, and the browser never sees a key.
 
 ## Mock mode
 
@@ -172,13 +243,18 @@ Unknown names still work in mock mode because the mock creates a clearly-labelle
 
 1. Fork or import [github.com/OlsOls4/memory-lane](https://github.com/OlsOls4/memory-lane).
 2. In Vercel: **Add New → Project**, import the repo. The framework preset is Next.js and no build settings need changing.
-3. Add `QLOO_API_KEY`, and optionally `GEMINI_API_KEY`, under **Settings → Environment Variables**.
-4. Deploy. The API routes run as Node serverless functions (`maxDuration = 60`). A single plan makes about 18 Qloo
-   calls, run in parallel in each phase.
+3. Add `QLOO_API_KEY`, and optionally `NEBIUS_API_KEY` (and `TAVILY_API_KEY`), under **Settings → Environment Variables**.
+4. Deploy. The plan and group routes declare `maxDuration = 120` (the Ultra planner adds 17–26 s), so use a plan
+   whose function limit allows that. A single plan makes about 18–22 Qloo calls, run in parallel in each phase.
+
+> The `nebius-nemotron` branch is **not** deployed to the Qloo submission's Vercel project; deploy it as its own project.
 
 ## Privacy and safety
 
 - Use first names only. Profiles are processed in memory for one request and **never stored or logged**.
+- What goes where: Qloo gets taste items, a decade window and a place. Nebius Token Factory gets the care flags, the
+  candidate items, staff notes and feedback text, and (for wording only) the first name. Tavily gets only the town,
+  country and decades.
 - Suggestions support the resident's care plan and never replace it. Diet notes tell staff to check IDDSI levels and
   sugar rules with the care plan and kitchen. The app gives no medical advice.
 
@@ -190,20 +266,32 @@ app/
   group/page.tsx        group session planner
   api/plan/route.ts     POST → WeekPlan
   api/group/route.ts    POST → GroupSession
-  api/status/route.ts   GET  → active modes
-components/             QuickStart, SharpenPanel, ResidentForm, PlanView, ItemCard, TraceView, ModeBadge
+  api/script/route.ts   POST → word-for-word session script (Nemotron 3.5 Lightning)
+  api/compare-ai/route.ts POST → Nemotron-only picks checked against Qloo
+  api/mcp/route.ts      MCP server (Streamable HTTP)
+  api/status/route.ts   GET  → active modes, model roles, ?probe=1, ?latency=1
+components/             QuickStart, SharpenPanel, ResidentForm, PlanView, ItemCard, TraceView, ModeBadge,
+                        AiLayer (Nemotron strip + model badges), DayExtras (session script, "how did it go")
 lib/
   qloo/client.ts        transport (HTTP | mock), normaliser, traced QlooService
   qloo/params.ts        supported params per filter.type + sanitiser
   qloo/mock.ts          mock transport
   qloo/fixtures.ts      illustrative fixtures (NOT Qloo data)
   agent/orchestrator.ts plans and runs the Qloo tool calls (incl. readLoved: domain inference for free text)
-  agent/composer.ts     week plan + group session composition (Gemini or template)
-  agent/gemini.ts       Gemini REST client
+  agent/composer.ts     week plan + group session: guards, planner, Nemotron wording/prompts or templates
+  agent/planner.ts      Nemotron 3 Ultra agentic planner with Qloo tool calls
+  agent/feedback.ts     "how did it go" → next week's changes
+  agent/script.ts       session scripts (Lightning) with template fallback
+  agent/localHistory.ts optional Tavily local-history hooks
+  agent/llmAgent.ts     notes reader, care review, AI-only picks (Nemotron)
+  nemotron/client.ts    Token Factory client: roles → models, fallback chains, reasoning toggle, JSON parsing
+  nemotron/names.ts     model display names (shared with the UI)
   agent/care.ts         era maths, care adaptations, sample residents
   validate.ts           input validation, born/decade/age parsing, "Town, Country" splitting
 ```
 
 ## Licence
 
-MIT. See [LICENSE](./LICENSE). Recommendations powered by [Qloo](https://www.qloo.com/).
+MIT. See [LICENSE](./LICENSE) (unchanged on this branch). Recommendations powered by [Qloo](https://www.qloo.com/);
+planning and wording by [NVIDIA Nemotron](https://www.nvidia.com/en-us/ai-data-science/foundation-models/nemotron/) on
+[Nebius Token Factory](https://tokenfactory.nebius.com/).

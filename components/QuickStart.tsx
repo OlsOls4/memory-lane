@@ -45,7 +45,7 @@ export default function QuickStart({
   useEffect(() => {
     fetch("/api/status")
       .then((r) => r.json())
-      .then((st) => setAi(st.composer === "gemini"))
+      .then((st) => setAi(st.composer === "nemotron"))
       .catch(() => {});
   }, []);
   const story = (value.story || "").trim();

@@ -10,6 +10,8 @@ export interface ResidentConstraints {
   diabetic: boolean;
   otherDietary?: string;
   notes?: string;
+  /** Things to steer clear of ("war films", "his late wife"). Read by the planner and a keyword guard; never sent to Qloo. */
+  avoid?: string;
 }
 
 export interface ResidentFavourites {
@@ -64,9 +66,14 @@ export type ToolName =
   | "qloo.tags"
   | "qloo.insights"
   | "qloo.compare"
+  | "llm.read"
   | "llm.plan"
+  | "llm.tool"
   | "llm.review"
   | "llm.compose"
+  | "llm.prompts"
+  | "llm.feedback"
+  | "web.history"
   | "template.compose";
 
 export interface TraceStep {
@@ -79,6 +86,10 @@ export interface TraceStep {
   ms: number;
   mock: boolean;
   error?: string;
+  /** Nemotron model that ran this step (LLM steps only). */
+  model?: string;
+  /** Reasoning tokens Nemotron spent before answering (planner/feedback steps). */
+  reasoningTokens?: number;
 }
 
 export type Domain = "music" | "film" | "tv" | "books" | "audio" | "food" | "travel";
@@ -95,6 +106,8 @@ export interface PlanItem {
   signals: string[]; // compact signal chips e.g. "seed: Cilla Black", "release 1951–1966"
   location?: string;
   appealsTo?: string[]; // group mode
+  /** Nemotron planner: why this item should land with this resident. */
+  landing?: string;
 }
 
 export interface DayPlan {
@@ -107,7 +120,47 @@ export interface DayPlan {
   steps: string[];
   items: PlanItem[];
   prompts: string[];
+  /** Nemotron Nano: "if they light up, ask…" follow-ups. */
+  followUps?: string[];
   adaptations: string[];
+  /** Local history hooks for this day (Tavily web search, optional). */
+  localHistory?: LocalHook[];
+}
+
+export interface LocalHook {
+  title: string;
+  detail: string;
+  url?: string;
+  year?: number;
+}
+
+export type Reaction = "loved" | "some" | "no";
+
+/** Staff's "how did it go" for one day of last week's plan. */
+export interface DayFeedback {
+  day: string;
+  domain: Domain;
+  items: string[];
+  reaction: Reaction;
+  note?: string;
+}
+
+export interface Adaptation {
+  summary: string;
+  changes: string[];
+  keep: string[];
+  drop: string[];
+  model?: string;
+}
+
+/** One Nemotron call as shown in the "AI layer" strip. */
+export interface ModelUse {
+  role: "planner" | "writer" | "feedback" | "reader" | "prompts" | "script" | "review";
+  label: string;
+  model: string;
+  ms: number;
+  reasoningTokens?: number;
+  toolCalls?: number;
 }
 
 export interface EraInfo {
@@ -123,7 +176,16 @@ export interface WeekPlan {
   era: EraInfo;
   days: DayPlan[];
   generalAdaptations: string[];
-  composer: "gemini" | "template";
+  composer: "nemotron" | "template";
+  /** Who chose and ordered the items: the Nemotron Ultra agent, or deterministic code. */
+  planner: "nemotron" | "deterministic";
+  /** Planner's one-line strategy for the week. */
+  strategy?: string;
+  /** Candidates left out for this resident's sensitivities, with the reason. */
+  flagged: { name: string; reason: string; by: "nemotron" | "guard" }[];
+  /** What changed from last week's feedback, if this plan was adapted. */
+  adapted?: Adaptation;
+  models: ModelUse[];
   qlooMode: "live" | "mock";
   trace: TraceStep[];
   warnings: string[];
@@ -140,7 +202,8 @@ export interface GroupSession {
   outline: { minutes: number; segment: string; detail: string }[];
   prompts: string[];
   adaptations: string[];
-  composer: "gemini" | "template";
+  composer: "nemotron" | "template";
+  models: ModelUse[];
   qlooMode: "live" | "mock";
   trace: TraceStep[];
   warnings: string[];

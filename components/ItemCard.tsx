@@ -36,12 +36,18 @@ export default function ItemCard({ item }: { item: PlanItem }) {
           {item.eraVerified && !item.isFavourite && <span className="flag flag-era">From their memory years</span>}
         </span>
       </div>
+      {item.landing && <p className="landing">{item.landing}</p>}
       {item.appealsTo && item.appealsTo.length > 0 && <p className="appeals">Good for {item.appealsTo.join(", ")}</p>}
       <details className="why">
         <summary>
           <span>Why this?</span>
         </summary>
         <div className="why-body">
+          {item.landing && (
+            <p className="why-landing">
+              <span className="model-chip">Nemotron planner</span> {item.landing}
+            </p>
+          )}
           <p>{item.why}</p>
           {signals.length > 0 && (
             <ul className="signals" aria-label="What Qloo matched on">

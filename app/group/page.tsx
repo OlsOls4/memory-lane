@@ -4,6 +4,7 @@ import { useState } from "react";
 import ResidentForm, { EMPTY_RESIDENT, cleanResident } from "@/components/ResidentForm";
 import ItemCard from "@/components/ItemCard";
 import TraceView from "@/components/TraceView";
+import AiLayer from "@/components/AiLayer";
 import AgentProgress from "@/components/AgentProgress";
 import { runAgent, type LiveStep } from "@/lib/agentClient";
 import TuningDial from "@/components/TuningDial";
@@ -330,6 +331,7 @@ export default function GroupPage() {
               </article>
             </div>
           </div>
+          <AiLayer models={session.models || []} />
           <TraceView trace={session.trace} composer={session.composer} />
         </section>
       )}

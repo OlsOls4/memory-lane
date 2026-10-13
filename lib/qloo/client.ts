@@ -163,6 +163,21 @@ export class QlooService {
     this.emit(step, "end");
   }
 
+  /** Start a long-running step (e.g. a Nemotron call) so the UI shows it live; call end() when done. */
+  begin(tool: ToolName, purpose: string, extra: Partial<TraceStep> = {}): TraceStep {
+    const step: TraceStep = { n: this.trace.length + 1, tool, purpose, summary: [], ms: 0, mock: false, ...extra };
+    (step as any)._t0 = Date.now();
+    this.trace.push(step);
+    this.emit(step, "start");
+    return step;
+  }
+
+  end(step: TraceStep) {
+    if (!step.ms) step.ms = Date.now() - ((step as any)._t0 || Date.now());
+    delete (step as any)._t0;
+    this.emit(step, "end");
+  }
+
   private emit(step: TraceStep, phase: "start" | "end") {
     try {
       this.onStep?.(step, phase);

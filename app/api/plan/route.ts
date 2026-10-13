@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { streamAgent, wantsStream } from "@/lib/agentStream";
 import { buildWeekPlan } from "@/lib/agent/composer";
-import { parseResident } from "@/lib/validate";
+import { parseFeedback, parseResident } from "@/lib/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
-// POST /api/plan  { resident: ResidentProfile }  ->  WeekPlan
+// POST /api/plan  { resident: ResidentProfile, feedback?: DayFeedback[] }  ->  WeekPlan
+// feedback = last week's "how did it go" per day; the agent adapts this week from it.
 // Resident data is processed in memory only and never stored.
 export async function POST(req: Request) {
   let body: any;
@@ -22,9 +23,10 @@ export async function POST(req: Request) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 });
   }
-  if (wantsStream(req)) return streamAgent((onStep) => buildWeekPlan(resident, onStep), "Could not build the plan. Please try again.");
+  const feedback = parseFeedback(body?.feedback);
+  if (wantsStream(req)) return streamAgent((onStep) => buildWeekPlan(resident, onStep, { feedback }), "Could not build the plan. Please try again.");
   try {
-    const plan = await buildWeekPlan(resident);
+    const plan = await buildWeekPlan(resident, undefined, { feedback });
     return NextResponse.json(plan, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {
     console.error("plan failed", e);

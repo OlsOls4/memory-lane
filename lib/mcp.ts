@@ -17,6 +17,7 @@ const residentSchema = {
     firstName: { type: "string", description: "Optional first name. Used only in the wording; never sent to Qloo." },
     hometown: { type: "string", description: 'Optional town they grew up in ("Liverpool").' },
     country: { type: "string", description: 'Country they grew up in. Default "United Kingdom".' },
+    avoid: { type: "string", description: 'Optional: subjects to steer clear of ("war films"). Read by the planner; never sent to Qloo.' },
     hearing: { type: "string", enum: ["none", "mild", "significant"] },
     vision: { type: "string", enum: ["none", "mild", "significant"] },
     dementiaStage: { type: "string", enum: ["none", "early", "moderate", "advanced"] },
@@ -64,7 +65,7 @@ function toRaw(a: any) {
     hometown: a?.hometown,
     country: a?.country,
     loved: a?.loved,
-    constraints: { hearing: a?.hearing, vision: a?.vision, dementiaStage: a?.dementiaStage, softFoods: a?.softFoods, diabetic: a?.diabetic },
+    constraints: { hearing: a?.hearing, vision: a?.vision, dementiaStage: a?.dementiaStage, softFoods: a?.softFoods, diabetic: a?.diabetic, avoid: a?.avoid },
   };
   const age = born.match(/^(?:age\s*)?(\d{2,3})$/i);
   if (/^\d{4}$/.test(born)) raw.birthYear = born;
@@ -76,16 +77,19 @@ function toRaw(a: any) {
 
 function planText(p: WeekPlan): string {
   const lines = [
-    `Reminiscence week (${p.era.formativeStart}–${p.era.formativeEnd} were their teens and twenties). Qloo: ${p.qlooMode}, ${p.trace.filter((t) => t.tool.startsWith("qloo.")).length} calls.`,
+    `Reminiscence week (${p.era.formativeStart}–${p.era.formativeEnd} were their teens and twenties). Qloo: ${p.qlooMode}, ${p.trace.filter((t) => t.tool.startsWith("qloo.")).length} calls. Planner: ${p.planner === "nemotron" ? "NVIDIA Nemotron 3 Ultra on Nebius Token Factory" : "deterministic"}.`,
   ];
+  if (p.strategy) lines.push(`Strategy: ${p.strategy}`);
+  if (p.adapted) lines.push(`Adapted from last week: ${p.adapted.summary}`);
   if (p.understood?.length) lines.push(`Understood: ${p.understood.join("; ")}`);
   for (const d of p.days) {
     lines.push("", `${d.day}: ${d.title} (${d.durationMins} min)`);
-    for (const it of d.items.slice(0, 4)) lines.push(`- ${it.name}${it.year ? ` (${it.year})` : ""}: ${it.why}`);
+    for (const it of d.items.slice(0, 4)) lines.push(`- ${it.name}${it.year ? ` (${it.year})` : ""}: ${it.landing || it.why}`);
     for (const s of d.steps.slice(0, 3)) lines.push(`  step: ${s}`);
     if (d.prompts[0]) lines.push(`  ask: ${d.prompts[0]}`);
     for (const a of d.adaptations) lines.push(`  care: ${a}`);
   }
+  if (p.flagged.length) lines.push("", `Left out: ${p.flagged.slice(0, 6).map((f) => `${f.name} (${f.reason})`).join("; ")}`);
   if (p.warnings.length) lines.push("", `Notes: ${p.warnings.join(" ")}`);
   lines.push("", "Open the full printable plan at https://memory-lane-azure-six.vercel.app");
   return lines.join("\n");
@@ -108,7 +112,11 @@ function slimPlan(p: WeekPlan) {
     era: p.era,
     qlooMode: p.qlooMode,
     qlooCalls: p.trace.filter((t) => t.tool.startsWith("qloo.")).length,
-    days: p.days.map((d) => ({ day: d.day, title: d.title, items: d.items.map((i) => ({ name: i.name, domain: i.domain, year: i.year, why: i.why })), steps: d.steps, prompts: d.prompts, adaptations: d.adaptations })),
+    planner: p.planner,
+    strategy: p.strategy,
+    flagged: p.flagged,
+    models: p.models.map((m) => ({ role: m.role, model: m.model, ms: m.ms })),
+    days: p.days.map((d) => ({ day: d.day, title: d.title, items: d.items.map((i) => ({ name: i.name, domain: i.domain, year: i.year, why: i.why, landing: i.landing })), steps: d.steps, prompts: d.prompts, adaptations: d.adaptations })),
     warnings: p.warnings,
   };
 }
@@ -150,7 +158,7 @@ export async function handleRpc(msg: any): Promise<any | undefined> {
       return ok({
         protocolVersion: SUPPORTED.includes(asked) ? asked : PROTOCOL,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "memory-lane", title: "Memory Lane (Qloo-powered reminiscence planner)", version: "1.0.0" },
+        serverInfo: { name: "memory-lane", title: "Memory Lane (Qloo taste graph + NVIDIA Nemotron planner)", version: "1.1.0" },
         instructions:
           "Use these tools when someone caring for an older person (care-home staff, a family member) wants era-matched music, films, TV, food or places to spark memories and conversation. Ask for roughly when the person was born and one thing they loved; hometown and care needs are optional. Never pass health details beyond the listed care flags.",
       });

@@ -115,7 +115,7 @@ export interface QuickInput {
   born: string; // "1946", "1940s" or "age 82"
   place: string; // town, optionally ", Country"
   loved: string;
-  /** Optional free-text notes, read by the AI planner when Gemini is configured. */
+  /** Optional free-text notes, read by the Nemotron notes reader when NEBIUS_API_KEY is set. */
   story?: string;
 }
 

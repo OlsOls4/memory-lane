@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { compareWithAiOnly } from "@/lib/agent/compareAi";
-import { geminiEnabled } from "@/lib/agent/gemini";
+import { nemotronEnabled } from "@/lib/nemotron/client";
 import { parseResident } from "@/lib/validate";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ export const maxDuration = 60;
 
 // POST /api/compare-ai { resident } -> what an LLM alone suggests, each pick checked against Qloo.
 export async function POST(req: Request) {
-  if (!geminiEnabled()) return NextResponse.json({ error: "The AI-only comparison needs GEMINI_API_KEY." }, { status: 503 });
+  if (!nemotronEnabled()) return NextResponse.json({ error: "The AI-only comparison needs NEBIUS_API_KEY." }, { status: 503 });
   let resident;
   try {
     const body = await req.json();

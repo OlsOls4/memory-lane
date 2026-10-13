@@ -28,7 +28,7 @@ const body = localFont({
 export const metadata: Metadata = {
   title: "Memory Lane: a week of reminiscence for each resident",
   description:
-    "Memory Lane helps care-home activity staff plan a week of personalised, era-matched reminiscence activities using Qloo's taste graph.",
+    "Memory Lane helps care-home activity staff plan a week of personalised, era-matched reminiscence activities using Qloo's taste graph and NVIDIA Nemotron on Nebius Token Factory.",
   metadataBase: new URL("https://memory-lane-azure-six.vercel.app"),
   openGraph: {
     title: "Memory Lane",
@@ -61,6 +61,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
         <main id="main">{children}</main>
+        <footer className="site-foot no-print">
+          <p>
+            Memory Lane · recommendations from Qloo’s taste AI · planning and wording by NVIDIA Nemotron on Nebius Token Factory · MIT licensed
+          </p>
+        </footer>
       </body>
     </html>
   );

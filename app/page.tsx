@@ -9,7 +9,8 @@ import QuickStart, { COUNTRIES } from "@/components/QuickStart";
 import SharpenPanel from "@/components/SharpenPanel";
 import { QUICK_SAMPLES, SAMPLE_RESIDENTS, type QuickInput } from "@/lib/agent/care";
 import { parseBirth, parseBornText, splitPlace } from "@/lib/validate";
-import type { ResidentProfile, WeekPlan } from "@/lib/types";
+import type { DayFeedback, ResidentProfile, WeekPlan } from "@/lib/types";
+import type { DayFeedbackState } from "@/components/DayExtras";
 
 /** Smooth scrolling only for people who have not asked for reduced motion. */
 const scrollBehaviour = (): ScrollBehavior =>
@@ -46,6 +47,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [steps, setSteps] = useState<LiveStep[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Record<string, DayFeedbackState>>({});
 
   // Sensible default country from the browser's language (en-US -> United States), editable inline.
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function Home() {
   );
   const dirty = JSON.stringify(payload) !== lastSent;
 
-  async function build(body: unknown = payload) {
+  async function build(body: unknown = payload, lastWeek?: DayFeedback[]) {
     setBusy(true);
     setError(null);
     const sent = JSON.stringify(body);
@@ -68,8 +70,9 @@ export default function Home() {
       setSteps([]);
       const firstPlan = !plan;
       if (firstPlan) setTimeout(() => document.getElementById("plan")?.scrollIntoView({ behavior: scrollBehaviour(), block: "start" }), 50);
-      const out = await runAgent<WeekPlan>("/api/plan", { resident: body }, setSteps);
+      const out = await runAgent<WeekPlan>("/api/plan", { resident: body, feedback: lastWeek }, setSteps);
       setPlan(out);
+      setFeedback({});
       setLastSent(sent);
       if (firstPlan) setTimeout(() => document.getElementById("plan")?.scrollIntoView({ behavior: scrollBehaviour() }), 50);
     } catch (e: any) {
@@ -77,6 +80,16 @@ export default function Home() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** "How did it go" → next week: send last week's days with the reactions staff tapped. */
+  function planNextWeek() {
+    if (!plan) return;
+    const lastWeek: DayFeedback[] = plan.days
+      .filter((d) => feedback[d.day]?.reaction)
+      .map((d) => ({ day: d.day, domain: d.domain, items: d.items.map((i) => i.name), reaction: feedback[d.day].reaction!, note: feedback[d.day].note?.trim() || undefined }));
+    if (!lastWeek.length) return;
+    void build(payload, lastWeek).then(() => document.getElementById("plan")?.scrollIntoView({ behavior: scrollBehaviour(), block: "start" }));
   }
 
   function tryExample(q: QuickInput) {
@@ -189,10 +202,14 @@ export default function Home() {
       )}
 
       <div id="plan">
-        {busy && <AgentProgress steps={steps} expected={16} title={plan ? "Updating the plan" : "Building the week"} compact={!!plan} />}
+        {busy && <AgentProgress steps={steps} expected={22} title={plan ? "Updating the plan" : "Building the week"} compact={!!plan} />}
         {plan && (
           <PlanView
             plan={plan}
+            feedback={feedback}
+            onFeedback={(day, v) => setFeedback((f) => ({ ...f, [day]: v }))}
+            onAdapt={planNextWeek}
+            busy={busy}
             rail={
               view === "quick" ? (
                 <SharpenPanel

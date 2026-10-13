@@ -5,7 +5,7 @@ import { parseResident } from "@/lib/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 // POST /api/group  { residents: ResidentProfile[] (2–6) }  ->  GroupSession
 export async function POST(req: Request) {

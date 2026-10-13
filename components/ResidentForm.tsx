@@ -120,6 +120,10 @@ export default function ResidentForm({
             Other dietary notes
             <input value={value.constraints.otherDietary || ""} onChange={(e) => setC({ otherDietary: e.target.value })} placeholder="e.g. vegetarian, no nuts" />
           </label>
+          <label>
+            Steer clear of
+            <input value={value.constraints.avoid || ""} maxLength={200} onChange={(e) => setC({ avoid: e.target.value || undefined })} placeholder="e.g. war films, talk of the sea" />
+          </label>
         </div>
         <div className="checks">
           <label className="check">

@@ -6,7 +6,7 @@ import type { WeekPlan } from "@/lib/types";
 const LABEL: Record<CheckedPick["status"], string> = { verified: "Checks out", "wrong-era": "Wrong years", "not-found": "Can’t verify" };
 const DOMAIN: Record<string, string> = { music: "Music", film: "Film", tv: "TV", food: "Places to eat", travel: "Places" };
 
-/** Side-by-side: what an AI alone suggests vs the Qloo-grounded plan. Shown only when Gemini is configured. */
+/** Side-by-side: what an AI alone suggests vs the Qloo-grounded plan. Shown only when Nemotron is configured. */
 export default function AiCompare({ plan }: { plan: WeekPlan }) {
   const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -15,7 +15,7 @@ export default function AiCompare({ plan }: { plan: WeekPlan }) {
   useEffect(() => {
     fetch("/api/status")
       .then((r) => r.json())
-      .then((s) => setEnabled(s.composer === "gemini"))
+      .then((s) => setEnabled(s.composer === "nemotron"))
       .catch(() => {});
   }, []);
   useEffect(() => setOut(null), [plan.generatedAt]);
@@ -45,7 +45,7 @@ export default function AiCompare({ plan }: { plan: WeekPlan }) {
       <div className="ai-compare-head">
         <div>
           <h3 id="ai-compare-h">Why not just ask a chatbot?</h3>
-          <p className="muted small">Ask an AI for the same resident without Qloo, then check every suggestion against Qloo’s taste graph.</p>
+          <p className="muted small">Ask Nemotron for the same resident without Qloo, then check every suggestion against Qloo’s taste graph.</p>
         </div>
         {!out && (
           <button className="btn btn-secondary" onClick={run} disabled={busy} aria-busy={busy}>

@@ -28,9 +28,11 @@ export interface ResidentContext {
   warnings: string[];
   /** How each free-text "loved" item was read (Quick start). */
   understood: string[];
+  /** Favourites the Nemotron planner chose to feature (the composer shows up to two per day). */
+  pickedFavs?: Set<string>;
 }
 
-const T = {
+export const T = {
   artist: "urn:entity:artist",
   movie: "urn:entity:movie",
   tv: "urn:entity:tv_show",
@@ -448,7 +450,7 @@ export function toItem(ctx: ResidentContext, e: QEntity, domain: Domain, isFavou
 }
 
 /** Qloo music-genre tag IDs for the decades a person spent aged roughly 10–25. */
-function eraGenreTags(start: number, end: number, british: boolean): string[] {
+export function eraGenreTags(start: number, end: number, british: boolean): string[] {
   const g = (x: string) => `urn:tag:genre:music:${x}`;
   const byDecade: Record<number, string[]> = {
     1920: ["jazz", "swing", "crooner"],
@@ -462,4 +464,30 @@ function eraGenreTags(start: number, end: number, british: boolean): string[] {
   const out: string[] = [];
   for (let d = Math.floor(start / 10) * 10; d <= end; d += 10) for (const t of byDecade[Math.min(Math.max(d, 1920), 1980)] || []) if (!out.includes(t)) out.push(t);
   return out.slice(0, 6).map(g);
+}
+
+// ---------------------------------------------------------------------------
+// Extra candidates on demand (a tool the Nemotron planner can call)
+// ---------------------------------------------------------------------------
+
+/** One more era-filtered /v2/insights call for a domain, excluding what the planner has already seen. */
+export async function moreCandidates(svc: QlooService, ctx: ResidentContext, d: Domain, exclude: string[], why: string): Promise<QEntity[]> {
+  const { era, profile: p } = ctx;
+  const seeds = [...ctx.seeds.artists, ...ctx.seeds.films, ...ctx.seeds.tv, ...ctx.seeds.books];
+  const seedCsv = csv(ids(seeds));
+  const hobbyCsv = csv(ctx.hobbyTags.map((t) => t.id));
+  const base = { "signal.demographics.age": era.ageBucket, "filter.exclude.entities": csv([...exclude, ...ids(seeds)]), "feature.explainability": true, take: 8 };
+  const releaseCountry = countryForRelease(p.country);
+  const placeQuery = p.hometown.trim() ? (p.hometown.includes(",") ? p.hometown.trim() : `${p.hometown.trim()}, ${p.country}`) : p.country;
+  const genreCsv = csv(eraGenreTags(era.formativeStart, era.formativeEnd, releaseCountry !== "United States"));
+  const params: Record<Domain, Record<string, string | number | boolean | undefined>> = {
+    music: { "filter.type": T.artist, "signal.interests.entities": seedCsv, "signal.interests.tags": seedCsv ? undefined : genreCsv },
+    film: { "filter.type": T.movie, "signal.interests.entities": seedCsv, "signal.interests.tags": hobbyCsv, "filter.release_year.min": era.formativeStart - 3, "filter.release_year.max": era.formativeEnd },
+    tv: { "filter.type": T.tv, "signal.interests.entities": seedCsv, "signal.interests.tags": hobbyCsv, "filter.release_year.min": era.formativeStart - 3, "filter.release_year.max": era.formativeEnd + 5, "filter.release_country": releaseCountry },
+    books: { "filter.type": T.book, "signal.interests.entities": seedCsv, "signal.interests.tags": hobbyCsv, "filter.publication_year.min": era.formativeStart - 20, "filter.publication_year.max": era.formativeEnd },
+    audio: { "filter.type": T.podcast, "signal.interests.entities": seedCsv, "signal.interests.tags": hobbyCsv || genreCsv },
+    food: { "filter.type": T.place, "filter.tags": "urn:tag:genre:place:restaurant", "signal.interests.tags": csv(ctx.foodTags.map((t) => t.id)), "signal.interests.entities": seedCsv, "filter.location.query": placeQuery },
+    travel: { "filter.type": T.destination, "signal.location.query": placeQuery, "signal.interests.entities": seedCsv, "signal.interests.tags": hobbyCsv },
+  };
+  return svc.insights({ ...base, ...params[d] }, why);
 }

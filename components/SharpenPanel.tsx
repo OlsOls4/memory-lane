@@ -60,6 +60,16 @@ export default function SharpenPanel({
         {stage("advanced", "Advanced")}
       </div>
 
+      <label className="group-label" htmlFor="sh-avoid">Anything to steer clear of?</label>
+      <input
+        id="sh-avoid"
+        className="avoid-input"
+        value={c.avoid || ""}
+        maxLength={200}
+        onChange={(e) => setC({ avoid: e.target.value || undefined })}
+        placeholder="e.g. war films, talk of the sea"
+      />
+
       <p className="group-label" id="sh-loved">Things they loved</p>
       <div className="chip-row" role="group" aria-labelledby="sh-loved">
         {loved.map((x) => (

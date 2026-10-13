@@ -1,19 +1,26 @@
-// Composes the weekly plan. Items are ALWAYS chosen from Qloo results by deterministic code;
-// the LLM (Gemini, optional) only writes the human wording around them. With no key, a
-// template composer writes the wording instead, so the app runs with zero keys.
+// Composes the weekly plan. Items are ALWAYS Qloo entities. With NEBIUS_API_KEY set, NVIDIA Nemotron
+// (via Nebius Token Factory) plans and words the week:
+//   Nano reads staff notes → Qloo gathers candidates → guards → Ultra picks/orders/flags (with Qloo tool calls)
+//   → Super writes the wording and Nano the prompts, in parallel.
+// With no key (or if any call fails) deterministic code and a template composer do each job, so the
+// app always runs end to end.
 
-import type { DayPlan, Domain, GroupSession, PlanItem, ResidentProfile, WeekPlan } from "../types";
+import type { DayFeedback, DayPlan, Domain, GroupSession, LocalHook, ModelUse, PlanItem, ResidentProfile, WeekPlan } from "../types";
 import { QlooService, type StepListener } from "../qloo/client";
-import { adaptationsFor, isUK } from "./care";
+import { adaptationsFor, eraFor, isUK } from "./care";
 import { gatherResident, toItem, type ResidentContext } from "./orchestrator";
-import { geminiEnabled, geminiJSON, geminiModel, lastGeminiError } from "./gemini";
+import { lastNemotronError, nemotronEnabled, nemotronJSON, shortModel } from "../nemotron/client";
 import { planFromStory, reviewCandidates } from "./llmAgent";
+import { runPlanner, type ThemeKey } from "./planner";
+import { applyFeedback, normTitle } from "./feedback";
+import { localHistory } from "./localHistory";
 import { displayName } from "../validate";
 
 const take = <X>(xs: X[], n: number) => xs.slice(0, n);
 
 function itemsFor(ctx: ResidentContext, d: Domain, fav: { id: string; name: string; year?: number; tags: any[]; type: string }[], n: number) {
-  const favItems = fav.slice(0, 1).map((e) => toItem(ctx, e as any, d, true));
+  const picked = ctx.pickedFavs ? fav.filter((e) => ctx.pickedFavs!.has(e.id)).slice(0, 2) : [];
+  const favItems = (picked.length ? picked : fav.slice(0, 1)).map((e) => toItem(ctx, e as any, d, true));
   const recs = ctx.results[d].filter((e) => !fav.some((f) => f.id === e.id)).map((e) => toItem(ctx, e, d));
   return [...favItems, ...take(recs, n - favItems.length)];
 }
@@ -195,8 +202,8 @@ function templateDays(ctx: ResidentContext): DayPlan[] {
   return days;
 }
 
-/** Ask Gemini to rewrite titles/intros/steps/prompts. Items stay exactly as Qloo chose them. */
-async function geminiPolish(days: DayPlan[], ctx: ResidentContext): Promise<DayPlan[] | null> {
+/** Nemotron Super (reasoning off) rewrites titles, intros and steps. Items stay exactly as chosen. */
+async function writerPolish(days: DayPlan[], ctx: ResidentContext, models: ModelUse[]): Promise<{ days: DayPlan[]; model: string; ms: number } | null> {
   const p = ctx.profile;
   const brief = {
     resident: {
@@ -207,49 +214,92 @@ async function geminiPolish(days: DayPlan[], ctx: ResidentContext): Promise<DayP
       dementiaStage: p.constraints.dementiaStage,
       hearing: p.constraints.hearing,
       vision: p.constraints.vision,
+      steerClearOf: p.constraints.avoid || undefined,
     },
     formativeYears: `${ctx.era.formativeStart}-${ctx.era.formativeEnd}`,
     days: days.map((d) => ({
       day: d.day,
       theme: d.theme,
       durationMins: d.durationMins,
-      items: d.items.map((i) => ({ name: i.name, year: i.year, why: i.why })),
+      items: d.items.map((i) => ({ name: i.name, year: i.year, why: i.landing || i.why })),
     })),
   };
   const prompt = `You write reminiscence activity plans for care-home activity staff in ${p.country}.
 Use warm, plain ${p.country === "United States" ? "American" : "British"} English. Write for staff, not the resident.
-For each day, write: title (max 8 words), intro (1-2 sentences), steps (3-5 short imperative steps that use ONLY the listed items by name; never invent other songs, films, shows, books or places), prompts (3 conversation prompts suited to dementia stage "${p.constraints.dementiaStage}": for moderate/advanced use recognition, yes/no or either/or questions).
-Never give medical advice. Return JSON: {"days":[{"day":"Monday","title":"","intro":"","steps":[""],"prompts":[""]}]} with exactly ${days.length} days in the same order.
+For each day, write: title (max 8 words), intro (1-2 sentences), steps (3-5 short imperative steps that use ONLY the listed items by name; never invent other songs, films, shows, books or places).
+Never give medical advice. Return JSON: {"days":[{"day":"Monday","title":"","intro":"","steps":[""]}]} with exactly ${days.length} days in the same order.
 DATA:
 ${JSON.stringify(brief)}`;
-  const out = await geminiJSON<{ days: { day: string; title: string; intro: string; steps: string[]; prompts: string[] }[] }>(prompt, 15000);
-  if (!out || !Array.isArray(out.days) || out.days.length !== days.length) return null;
-  return days.map((d, i) => {
-    const g = out.days[i];
-    const ok = g && typeof g.title === "string" && Array.isArray(g.steps) && Array.isArray(g.prompts);
-    return ok
-      ? {
-          ...d,
-          title: g.title.slice(0, 80) || d.title,
-          intro: String(g.intro || d.intro).slice(0, 400),
-          steps: g.steps.map(String).slice(0, 6),
-          prompts: g.prompts.map(String).slice(0, 4),
-        }
-      : d;
-  });
+  const r = await nemotronJSON<any>("writer", prompt, { timeoutMs: 25000, maxTokens: 3000 });
+  const got = dayList(r?.data);
+  if (!r || got.length < Math.ceil(days.length / 2)) return null;
+  models.push({ role: "writer", label: "Writes the week", model: r.meta.model, ms: r.meta.ms });
+  return {
+    model: r.meta.model,
+    ms: r.meta.ms,
+    days: days.map((d, i) => {
+      const g = matchDay(got, d.day, i);
+      const ok = g && typeof g.title === "string" && Array.isArray(g.steps) && g.steps.length;
+      return ok ? { ...d, title: String(g.title).slice(0, 80) || d.title, intro: String(g.intro || d.intro).slice(0, 400), steps: g.steps.map(String).slice(0, 6) } : d;
+    }),
+  };
 }
 
-/** LLM planner: turn staff's free-text notes into things to look up in Qloo. Never sent to Qloo itself. */
-async function applyStory(svc: QlooService, profile: ResidentProfile): Promise<ResidentProfile> {
-  if (!profile.story || !geminiEnabled()) return profile;
-  const started = Date.now();
-  const step = { n: svc.trace.length + 1, tool: "llm.plan" as const, purpose: "AI planner reads the staff notes and decides what to look up in Qloo", summary: [] as string[], ms: 0, mock: false };
+/** Models sometimes return {"days":[...]}, a bare array, or an object keyed by day name. */
+function dayList(x: any): any[] {
+  if (!x) return [];
+  if (Array.isArray(x)) return x;
+  if (Array.isArray(x.days)) return x.days;
+  if (x.days && typeof x.days === "object") return Object.entries(x.days).map(([day, v]: [string, any]) => ({ day, ...v }));
+  const keyed = Object.entries(x).filter(([k]) => /day$/i.test(k));
+  return keyed.map(([day, v]: [string, any]) => ({ day, ...v }));
+}
+
+function matchDay(xs: any[], day: string, i: number) {
+  return xs.find((x) => String(x?.day || "").toLowerCase().startsWith(day.toLowerCase().slice(0, 3))) || (xs.length === 7 ? xs[i] : undefined);
+}
+
+/** Nemotron Nano (reasoning off): conversation prompts and "if they light up" follow-ups for each day. */
+async function promptsFor(days: DayPlan[], ctx: ResidentContext, models: ModelUse[]): Promise<{ prompts: string[][]; followUps: string[][]; model: string; ms: number } | null> {
+  const p = ctx.profile;
+  const stage = p.constraints.dementiaStage;
+  const style =
+    stage === "moderate" || stage === "advanced"
+      ? "Use recognition, yes/no or either/or questions (no open recall). Very short."
+      : "Use open, inviting questions that let them tell a story.";
+  const prompt = `Write conversation prompts for a care-home reminiscence session with a resident born about ${p.birthYear}, who grew up in ${p.hometown || p.country}. Dementia stage: ${stage}. ${style}
+${p.constraints.avoid ? `Do not touch on: ${p.constraints.avoid}.` : ""}
+For each day give 3 "prompts" staff can ask about the listed items, and 2 "followUps" to ask if the resident lights up (going one step deeper into their own memories). Refer to items by name. No medical advice.
+Return JSON {"days":[{"day":"Monday","prompts":["","",""],"followUps":["",""]}]} with exactly ${days.length} days in order.
+DAYS:
+${days.map((d) => `${d.day} — ${d.theme}: ${d.items.map((i) => `${i.name}${i.year ? ` (${i.year})` : ""}`).join(", ") || "no items"}`).join("\n")}`;
+  const r = await nemotronJSON<any>("prompts", prompt, { timeoutMs: 20000, maxTokens: 2200 });
+  const got = dayList(r?.data);
+  if (!r || got.length < Math.ceil(days.length / 2)) return null;
+  models.push({ role: "prompts", label: "Prompts & follow-ups", model: r.meta.model, ms: r.meta.ms });
+  const xs = days.map((d, i) => matchDay(got, d.day, i));
+  return {
+    model: r.meta.model,
+    ms: r.meta.ms,
+    prompts: xs.map((x, i) => (Array.isArray(x?.prompts) && x.prompts.length ? x.prompts.map(String).slice(0, 4) : days[i].prompts)),
+    followUps: xs.map((x) => (Array.isArray(x?.followUps) ? x.followUps.map(String).slice(0, 3) : [])),
+  };
+}
+
+/** Nemotron Nano reads staff's free-text notes into things to look up in Qloo. The notes never go to Qloo. */
+async function applyStory(svc: QlooService, profile: ResidentProfile, models: ModelUse[]): Promise<ResidentProfile> {
+  if (!profile.story || !nemotronEnabled()) return profile;
+  const step = svc.begin("llm.read", "Nemotron reads the staff notes and decides what to look up in Qloo");
   const r = await planFromStory(profile.story, profile).catch(() => null);
-  step.ms = Date.now() - started;
   if (!r) {
-    svc.record({ ...step, summary: ["Could not read the notes; using the quick-start answers only"], error: "planner unavailable" });
+    step.summary = ["Could not read the notes; using the quick-start answers only"];
+    step.error = "notes reader unavailable";
+    svc.end(step);
     return profile;
   }
+  step.model = r.meta.model;
+  step.ms = r.meta.ms;
+  models.push({ role: "reader", label: "Reads staff notes", model: r.meta.model, ms: r.meta.ms });
   const merge = (a: string[], b: string[]) => Array.from(new Set([...a, ...b].map((x) => x.trim()).filter(Boolean))).slice(0, 5);
   const f = profile.favourites;
   const next: ResidentProfile = {
@@ -272,92 +322,211 @@ async function applyStory(svc: QlooService, profile: ResidentProfile): Promise<R
       hearing: profile.constraints.hearing !== "none" ? profile.constraints.hearing : r.constraints.hearing || "none",
       vision: profile.constraints.vision !== "none" ? profile.constraints.vision : r.constraints.vision || "none",
       dementiaStage: profile.constraints.dementiaStage !== "none" ? profile.constraints.dementiaStage : r.constraints.dementiaStage || "none",
+      avoid: [profile.constraints.avoid, ...r.avoid].filter(Boolean).join("; ").slice(0, 200) || undefined,
     },
   };
   const found = Object.entries(r.favourites).flatMap(([k, v]) => (v.length ? [`${k}: ${v.join(", ")}`] : []));
-  svc.record({ ...step, summary: [...(r.rationale.length ? r.rationale : found).slice(0, 4), ...(found.length ? [] : ["Nothing new to look up in the notes"])] });
+  step.summary = [
+    ...(r.rationale.length ? r.rationale : found).slice(0, 4),
+    ...(r.avoid.length ? [`Steer clear of: ${r.avoid.join(", ")}`] : []),
+    ...(found.length ? [] : ["Nothing new to look up in the notes"]),
+  ];
+  svc.end(step);
   return next;
 }
 
-/** Care-aware critic: removes unsuitable Qloo candidates; the plan then backfills from the remaining Qloo results. */
-async function applyReview(svc: QlooService, ctx: ResidentContext) {
-  const domains: Domain[] = ["music", "film", "tv", "books", "food", "travel"];
-  // Deterministic era guard (always on): no film, TV or book dated 20+ years after their formative years.
+// Words that, when staff ask to avoid a subject, widen into the vocabulary Qloo uses for it.
+const AVOID_EXPANSIONS: [RegExp, string[]][] = [
+  [/\b(war|wars|wartime|military|army|soldier|battle|blitz|evacuat)/i, ["war", "wartime", "world war", "war film", "battle", "military", "army", "soldier", "nazi", "blitz", "commando", "prisoner of war", "dunkirk", "d-day", "bomber"]],
+  [/\b(horror|scary|frighten)/i, ["horror", "slasher", "monster", "haunted", "zombie"]],
+  [/\b(hospital|asylum|illness|cancer|nurse)/i, ["hospital", "asylum", "psychiatric", "cancer"]],
+  [/\b(death|grief|funeral|bereave|widow|late (husband|wife))/i, ["death", "funeral", "grief", "bereavement", "widow"]],
+  [/\b(sea|drown|ship|boat)/i, ["shipwreck", "drowning", "titanic"]],
+];
+const STOP = new Set(["about", "anything", "films", "film", "music", "songs", "talk", "their", "with", "from", "that", "this", "please", "avoid", "steer", "clear", "dont", "don't", "very", "makes", "upset", "upsets", "content", "stuff", "things"]);
+
+function avoidTerms(avoid: string): string[] {
+  const out = new Set<string>();
+  for (const [re, xs] of AVOID_EXPANSIONS) if (re.test(avoid)) xs.forEach((x) => out.add(x));
+  for (const w of avoid.toLowerCase().split(/[^a-z'-]+/)) if (w.length >= 5 && !STOP.has(w)) out.add(w);
+  return [...out];
+}
+
+/**
+ * Deterministic guards (always on, with or without Nemotron):
+ *  - era guard: no film, TV or book dated 20+ years after their formative years
+ *  - avoid guard: drop candidates whose name, tags or description touch what staff asked to steer clear of
+ *  - feedback guard: drop what didn't land last week
+ * The resident's own favourites are never removed.
+ */
+function applyGuards(svc: QlooService, ctx: ResidentContext, exclude: Set<string>): { name: string; reason: string; by: "guard" }[] {
+  const flagged: { name: string; reason: string; by: "guard" }[] = [];
+  const domains: Domain[] = ["music", "film", "tv", "books", "audio", "food", "travel"];
   const late = ctx.era.formativeEnd + 20;
   for (const d of ["film", "tv", "books"] as Domain[]) {
     const kept = ctx.results[d].filter((e) => !e.year || e.year <= late);
-    if (kept.length >= 2) ctx.results[d] = kept;
+    const tooLate = ctx.results[d].filter((e) => e.year && e.year > late);
+    ctx.results[d] = kept.length >= 2 ? kept : [...kept, ...tooLate];
   }
-  if (!geminiEnabled()) return;
-  const started = Date.now();
+  // A favourite read from free text can resolve in Qloo to a same-named title from the wrong decades
+  // ("variety shows" → a 2016 drama). Drop those seeds rather than anchor a day on them.
+  for (const key of ["films", "tv", "books"] as const) {
+    const seeds = ctx.seeds[key];
+    const bad = seeds.filter((e) => e.year && (e.year > late || e.year < ctx.era.formativeStart - 40));
+    if (bad.length) {
+      ctx.seeds[key] = seeds.filter((e) => !bad.includes(e));
+      bad.forEach((e) => flagged.push({ name: `${e.name} (${e.year})`, reason: "Qloo matched a favourite to this title, but it is from the wrong years", by: "guard" }));
+    }
+  }
+  const terms = ctx.profile.constraints.avoid ? avoidTerms(ctx.profile.constraints.avoid) : [];
+  // Whole words only (so "war" never matches "Warwick"), on names and Qloo tags. Descriptions are left
+  // to the Nemotron planner, which can tell a war film from a film set after the war.
+  const re = terms.length ? new RegExp(`\\b(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})s?\\b`, "i") : null;
+  for (const d of domains) {
+    ctx.results[d] = ctx.results[d].filter((e) => {
+      if (exclude.has(normTitle(e.name))) {
+        flagged.push({ name: e.name, reason: "Didn't land last week", by: "guard" });
+        return false;
+      }
+      if (re) {
+        const hay = `${e.name} | ${e.tags.map((t) => t.name).join(" | ")}`;
+        const m = hay.match(re);
+        if (m) {
+          flagged.push({ name: e.name, reason: `Touches “${m[1].toLowerCase()}”, which staff asked to avoid`, by: "guard" });
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+  if (re || exclude.size)
+    svc.note("agent.plan", "Safety guard: leave out what staff asked to avoid", flagged.length ? flagged.slice(0, 5).map((f) => `Left out ${f.name}: ${f.reason}`) : ["Nothing in Qloo's candidates touched it"]);
+  return flagged;
+}
+
+/** Fallback critic when the Ultra planner is unavailable: Nemotron Super removes unsuitable candidates. */
+async function applyReview(svc: QlooService, ctx: ResidentContext, models: ModelUse[]): Promise<{ name: string; reason: string; by: "nemotron" }[]> {
+  if (!nemotronEnabled()) return [];
+  const domains: Domain[] = ["music", "film", "tv", "books", "food", "travel"];
+  const step = svc.begin("llm.review", "Nemotron care review of Qloo's candidates (planner fallback)");
   const subset = Object.fromEntries(domains.map((d) => [d, ctx.results[d]]));
   const r = await reviewCandidates(ctx.profile, ctx.era, subset).catch(() => null);
-  const ms = Date.now() - started;
   if (!r) {
-    svc.record({ n: svc.trace.length + 1, tool: "llm.review", purpose: "AI care review of Qloo's candidates", summary: ["Review unavailable; Qloo order kept"], ms, mock: false, error: `review unavailable: ${lastGeminiError.slice(-160)}` });
-    return;
+    step.summary = ["Review unavailable; Qloo order kept"];
+    step.error = `review unavailable: ${lastNemotronError.slice(-160)}`;
+    svc.end(step);
+    return [];
+  }
+  if (r.meta) {
+    step.model = r.meta.model;
+    step.ms = r.meta.ms;
+    models.push({ role: "review", label: "Care review", model: r.meta.model, ms: r.meta.ms });
   }
   const drop = new Set(r.drop.map((d) => d.id));
-  // Never remove a resident's own favourites.
   const favIds = new Set([...ctx.seeds.artists, ...ctx.seeds.films, ...ctx.seeds.tv, ...ctx.seeds.books].map((e) => e.id));
   for (const d of domains) {
     const kept = ctx.results[d].filter((e) => !drop.has(e.id) || favIds.has(e.id));
     if (kept.length >= 2 || ctx.results[d].length < 2) ctx.results[d] = kept;
   }
-  svc.record({
-    n: svc.trace.length + 1,
-    tool: "llm.review",
-    purpose: "AI care review: remove Qloo candidates unsuitable for this resident, backfill from Qloo",
-    summary: r.drop.length ? r.drop.slice(0, 5).map((d) => `Removed ${d.name}: ${d.reason}`) : ["All candidates suitable; nothing removed"],
-    ms,
-    mock: false,
-  });
+  step.summary = r.drop.length ? r.drop.slice(0, 5).map((d) => `Removed ${d.name}: ${d.reason}`) : ["All candidates suitable; nothing removed"];
+  svc.end(step);
+  return r.drop.map((d) => ({ name: d.name, reason: d.reason, by: "nemotron" as const }));
 }
 
-export async function buildWeekPlan(input: ResidentProfile, onStep?: StepListener): Promise<WeekPlan> {
-  const svc = new QlooService(undefined, onStep);
-  const profile = await applyStory(svc, input);
-  const ctx = await gatherResident(svc, profile);
-  await applyReview(svc, ctx);
-  let days = templateDays(ctx);
-  let composer: WeekPlan["composer"] = "template";
+const THEME_INDEX: Record<ThemeKey, number> = { music: 0, film: 1, food: 2, tv: 3, travel: 4, stories: 5 };
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-  if (geminiEnabled()) {
-    const started = Date.now();
-    const polished = await geminiPolish(days, ctx).catch(() => null);
-    if (polished) {
-      days = polished;
-      composer = "gemini";
-      svc.record({
-        n: svc.trace.length + 1,
-        tool: "llm.compose",
-        purpose: "Gemini writes the wording around the Qloo-chosen items",
-        summary: ["7 days rewritten; items untouched", `model ${geminiModel()}`],
-        ms: Date.now() - started,
-        mock: false,
-      });
+export interface BuildOptions {
+  /** Last week's "how did it go", to adapt this week. */
+  feedback?: DayFeedback[];
+}
+
+export async function buildWeekPlan(input: ResidentProfile, onStep?: StepListener, opts: BuildOptions = {}): Promise<WeekPlan> {
+  const svc = new QlooService(undefined, onStep);
+  const models: ModelUse[] = [];
+  let profile = input;
+  let fb: Awaited<ReturnType<typeof applyFeedback>> | null = null;
+  if (opts.feedback?.length) {
+    fb = await applyFeedback(svc, profile, opts.feedback, models);
+    profile = fb.profile;
+  }
+  profile = await applyStory(svc, profile, models);
+  const era0 = eraFor(profile.birthYear);
+  // Local history (Tavily, optional) runs alongside the Qloo phases.
+  const historyJob = localHistory(svc, profile, era0, models).catch(() => [] as LocalHook[]);
+  const ctx = await gatherResident(svc, profile);
+  const flagged: WeekPlan["flagged"] = applyGuards(svc, ctx, fb?.exclude || new Set());
+  // Last week's items that weren't loved go to the back of the queue.
+  if (fb) {
+    const kept = new Set(fb.adaptation.keep.map(normTitle));
+    const used = new Set(fb.lastWeek.map(normTitle));
+    for (const d of Object.keys(ctx.results) as Domain[]) {
+      const xs = ctx.results[d];
+      ctx.results[d] = [...xs.filter((e) => !used.has(normTitle(e.name)) || kept.has(normTitle(e.name))), ...xs.filter((e) => used.has(normTitle(e.name)) && !kept.has(normTitle(e.name)))];
+    }
+  }
+
+  // ---- Nemotron 3 Ultra plans the week (tool calls into Qloo), else deterministic ------------
+  let planner: WeekPlan["planner"] = "deterministic";
+  let outcome = null as Awaited<ReturnType<typeof runPlanner>> | null;
+  if (nemotronEnabled()) {
+    outcome = await runPlanner(svc, ctx, { feedback: fb?.forPlanner, lastWeek: fb?.lastWeek, models }).catch((e) => {
+      console.error("planner failed", e);
+      return null;
+    });
+    if (outcome?.ok) {
+      planner = "nemotron";
+      flagged.push(...outcome.flagged.map((f) => ({ ...f, by: "nemotron" as const })));
     } else {
-      svc.record({
-        n: svc.trace.length + 1,
-        tool: "template.compose",
-        purpose: "Gemini failed or returned invalid JSON; fell back to the template composer",
-        summary: ["template wording used"],
-        ms: Date.now() - started,
-        mock: false,
-      });
+      svc.note("agent.plan", "Planner fallback: Qloo order with a Nemotron care review", [outcome?.error || "planner unavailable"]);
+      flagged.push(...(await applyReview(svc, ctx, models)));
     }
   } else {
-    svc.note("template.compose", "No GEMINI_API_KEY: deterministic template composer wrote the wording", [
-      "Items, years and reasons all come from Qloo results",
+    svc.note("agent.plan", "No NEBIUS_API_KEY: deterministic planner (Qloo order, era-verified first)", ["Items, years and reasons all come from Qloo results"]);
+  }
+
+  let days = templateDays(ctx);
+  // "Why this will land" from the planner, then its theme order for Monday to Saturday.
+  if (outcome?.ok) {
+    days = days.map((d) => ({ ...d, items: d.items.map((i) => (outcome!.landing.has(i.entityId) ? { ...i, landing: outcome!.landing.get(i.entityId) } : i)) }));
+    const six = outcome.order.map((k) => days[THEME_INDEX[k]]);
+    days = [...six.map((d, i) => ({ ...d, day: WEEKDAYS[i] })), days[6]];
+  }
+
+  // ---- Wording (Super) and prompts (Nano) in parallel; templates if either fails -------------
+  let composer: WeekPlan["composer"] = "template";
+  if (nemotronEnabled()) {
+    const wStep = svc.begin("llm.compose", "Nemotron writes the wording around the chosen items");
+    const pStep = svc.begin("llm.prompts", "Nemotron writes conversation prompts and follow-up questions");
+    const [w, pr] = await Promise.all([
+      writerPolish(days, ctx, models).catch(() => null).finally(() => {}),
+      promptsFor(days, ctx, models).catch(() => null),
     ]);
+    if (w) {
+      days = w.days;
+      composer = "nemotron";
+      Object.assign(wStep, { model: w.model, ms: w.ms, summary: ["7 days written; items untouched", shortModel(w.model)] });
+    } else Object.assign(wStep, { tool: "template.compose", error: "writer unavailable", summary: ["template wording used"] });
+    if (pr) {
+      days = days.map((d, i) => ({ ...d, prompts: pr.prompts[i], followUps: pr.followUps[i] }));
+      composer = "nemotron";
+      Object.assign(pStep, { model: pr.model, ms: pr.ms, summary: [`${pr.prompts.flat().length} prompts, ${pr.followUps.flat().length} follow-ups`, shortModel(pr.model)] });
+    } else Object.assign(pStep, { error: "prompt writer unavailable", summary: ["template prompts used"] });
+    svc.end(wStep);
+    svc.end(pStep);
+  } else {
+    svc.note("template.compose", "No NEBIUS_API_KEY: deterministic template composer wrote the wording", ["Items, years and reasons all come from Qloo results"]);
   }
 
   const general = adaptationsFor(profile.constraints, displayName(profile));
+  if (profile.constraints.avoid) general.unshift(`Steer clear of: ${profile.constraints.avoid}. If it comes up, gently change the subject.`);
   const dietLines = general.filter((l) => /diet|Diabetic|IDDSI/i.test(l));
   const senseLines = general.filter((l) => /^(Hearing|Vision)/.test(l));
+  const history = await historyJob;
   days = days.map((d) => ({
     ...d,
     adaptations: d.domain === "food" ? dietLines : ["music", "film", "tv"].includes(d.domain) ? senseLines : [],
+    localHistory: d.domain === "travel" && history.length ? history : undefined,
   }));
 
   return {
@@ -366,6 +535,11 @@ export async function buildWeekPlan(input: ResidentProfile, onStep?: StepListene
     days,
     generalAdaptations: general,
     composer,
+    planner,
+    strategy: outcome?.ok ? outcome.strategy : undefined,
+    flagged: dedupeFlags(flagged),
+    adapted: fb?.adaptation,
+    models,
     qlooMode: svc.mock ? "mock" : "live",
     trace: svc.trace,
     warnings: ctx.warnings,
@@ -374,12 +548,20 @@ export async function buildWeekPlan(input: ResidentProfile, onStep?: StepListene
   };
 }
 
+function dedupeFlags(xs: WeekPlan["flagged"]) {
+  const seen = new Set<string>();
+  // Planner flags first (they carry a reason specific to this person), then guard flags.
+  const ordered = [...xs.filter((x) => x.by === "nemotron"), ...xs.filter((x) => x.by !== "nemotron")];
+  return ordered.filter((x) => (seen.has(x.name) ? false : (seen.add(x.name), true))).slice(0, 14);
+}
+
 // ---------------------------------------------------------------------------
 // Group session
 // ---------------------------------------------------------------------------
 
 export async function buildGroupSession(residents: ResidentProfile[], onStep?: StepListener): Promise<GroupSession> {
   const svc = new QlooService(undefined, onStep);
+  const models: ModelUse[] = [];
   const group = residents.slice(0, 6);
   svc.note("agent.plan", `Group session for ${group.map((r) => r.firstName).join(", ")}`, [
     "Resolve each resident's favourites and run music/film/TV insights individually",
@@ -509,22 +691,29 @@ export async function buildGroupSession(residents: ResidentProfile[], onStep?: S
   ];
   let composer: GroupSession["composer"] = "template";
 
-  if (geminiEnabled()) {
-    const started = Date.now();
-    const out = await geminiJSON<{ outline: { minutes: number; segment: string; detail: string }[]; prompts: string[] }>(
+  if (nemotronEnabled()) {
+    const step = svc.begin("llm.compose", "Nemotron writes the session running order around Qloo's picks");
+    const r = await nemotronJSON<{ outline: { minutes: number; segment: string; detail: string }[]; prompts: string[] }>(
+      "writer",
       `Write a 45-minute group reminiscence session for care-home staff. Residents: ${group
-        .map((r) => `${r.firstName} (b.${r.birthYear}, ${r.hometown}, ${r.country})`)
+        .map((r) => `${r.firstName} (b.${r.birthYear}, ${r.hometown || r.country})`)
         .join("; ")}. Use ONLY these items by name: ${[...music, ...film, ...tv]
-        .map((i) => `${i.name}${i.year ? ` (${i.year})` : ""}`)
-        .join(", ")}. Shared themes: ${themeNames.join(", ") || "none found"}. Strictest dementia stage: ${strictest.dementiaStage}.
-Return JSON {"outline":[{"minutes":5,"segment":"","detail":""}],"prompts":[""]} with 4-6 segments totalling 45 minutes and 4 prompts. No medical advice.`,
+        .map((i) => `${i.name}${i.year ? ` (${i.year})` : ""}${i.appealsTo?.length ? ` [reaches ${i.appealsTo.join(", ")}]` : ""}`)
+        .join(", ")}. Shared themes: ${themeNames.join(", ") || "none found"}. Strictest dementia stage: ${strictest.dementiaStage}.${
+        group.some((r) => r.constraints.avoid) ? ` Steer clear of: ${group.map((r) => r.constraints.avoid).filter(Boolean).join("; ")}.` : ""
+      }
+Return JSON {"outline":[{"minutes":5,"segment":"","detail":""}],"prompts":[""]} with 4-6 segments totalling 45 minutes and 4 prompts that draw in quieter residents by name. No medical advice.`,
+      { timeoutMs: 25000, maxTokens: 2000 },
     ).catch(() => null);
-    if (out?.outline?.length && Array.isArray(out.prompts)) {
+    const out = r?.data;
+    if (r && out?.outline?.length && Array.isArray(out.prompts)) {
       outline = out.outline.slice(0, 6).map((o) => ({ minutes: Number(o.minutes) || 5, segment: String(o.segment), detail: String(o.detail) }));
       prompts = out.prompts.map(String).slice(0, 5);
-      composer = "gemini";
-      svc.record({ n: svc.trace.length + 1, tool: "llm.compose", purpose: "Gemini writes the session outline around Qloo picks", summary: ["outline + prompts"], ms: Date.now() - started, mock: false });
-    }
+      composer = "nemotron";
+      models.push({ role: "writer", label: "Writes the session", model: r.meta.model, ms: r.meta.ms });
+      Object.assign(step, { model: r.meta.model, ms: r.meta.ms, summary: ["outline + prompts", shortModel(r.meta.model)] });
+    } else Object.assign(step, { error: "writer unavailable", summary: ["template outline used"] });
+    svc.end(step);
   }
   if (composer === "template") svc.note("template.compose", "Template composer wrote the group outline", ["picks and shared themes come from Qloo"]);
 
@@ -537,6 +726,7 @@ Return JSON {"outline":[{"minutes":5,"segment":"","detail":""}],"prompts":[""]} 
     prompts,
     adaptations: adaptationsFor(strictest, "each resident"),
     composer,
+    models,
     qlooMode: svc.mock ? "mock" : "live",
     trace: svc.trace,
     warnings: [

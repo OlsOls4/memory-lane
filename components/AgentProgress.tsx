@@ -9,7 +9,13 @@ const STAGE: Record<string, string> = {
   "qloo.insights": "Asking Qloo's taste graph",
   "qloo.compare": "Finding taste they share",
   "template.compose": "Writing the week",
-  "llm.compose": "Writing the week",
+  "llm.compose": "Nemotron is writing the week",
+  "llm.prompts": "Nemotron is writing the prompts",
+  "llm.plan": "Nemotron is planning the week",
+  "llm.read": "Nemotron is reading the notes",
+  "llm.review": "Nemotron is checking the picks",
+  "llm.feedback": "Nemotron is reading last week's feedback",
+  "web.history": "Looking up local history",
 };
 
 /**
@@ -100,7 +106,7 @@ export default function AgentProgress({
           </li>
         ))}
       </ol>
-      <p className="muted small agent-foot">Usually 15 to 40 seconds. Every step stays visible afterwards under “How Memory Lane chose this”.</p>
+      <p className="muted small agent-foot">Usually 20 to 60 seconds. Every step stays visible afterwards under “How Memory Lane chose this”.</p>
     </section>
   );
 }

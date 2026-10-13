@@ -1,4 +1,4 @@
-import type { ResidentProfile } from "./types";
+import type { DayFeedback, ResidentProfile } from "./types";
 
 const str = (v: unknown, max = 80) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const list = (v: unknown) =>
@@ -74,6 +74,7 @@ export function parseResident(raw: any): ResidentProfile {
       diabetic: !!c.diabetic,
       otherDietary: str(c.otherDietary, 120) || undefined,
       notes: str(c.notes, 200) || undefined,
+      avoid: str(c.avoid, 200) || undefined,
     },
   };
   if (approx) profile.birthYearApprox = true;
@@ -115,4 +116,21 @@ export function splitPlace(text: string, defaultCountry: string): { hometown: st
   }
   if (parts.length === 1 && COUNTRY_WORDS[parts[0].toLowerCase()]) return { hometown: "", country: COUNTRY_WORDS[parts[0].toLowerCase()] };
   return { hometown: text.trim(), country: defaultCountry };
+}
+
+const DOMAINS = ["music", "film", "tv", "books", "audio", "food", "travel"] as const;
+
+/** Validate last week's "how did it go" answers (max 7 days, short notes). */
+export function parseFeedback(raw: any): DayFeedback[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, 7)
+    .map((d: any) => ({
+      day: str(d?.day, 12),
+      domain: pick(d?.domain, DOMAINS, "music"),
+      items: list(d?.items),
+      reaction: pick(d?.reaction, ["loved", "some", "no"] as const, "some"),
+      note: str(d?.note, 300) || undefined,
+    }))
+    .filter((d) => d.day);
 }

@@ -480,3 +480,52 @@ input[aria-invalid="true"] { border-color: var(--error); }
 .tool-list li { display: grid; gap: 0.2rem; }
 .tool-list code { font-family: var(--mono); color: var(--blue); font-weight: 700; }
 .quote { font-style: italic; border-left: 4px solid var(--amber); padding-left: 0.8rem; }
+
+/* ---- Nemotron layer (nebius-nemotron branch) ------------------------------------- */
+.modes { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: 0.4rem; }
+.modes .mode { margin-left: 0; }
+.mode-nv { color: var(--navy); }
+.nv-mark { display: inline-block; width: 0.62rem; height: 0.62rem; border-radius: 2px; background: #76b900; flex: none; }
+.ai-layer { margin: 0 0 1.25rem; padding: 0.75rem 1rem 0.85rem; border: 1px solid var(--rule); border-radius: 16px; background: rgba(255, 255, 255, 0.55); }
+.ai-layer-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; margin: 0; font-size: 0.92rem; color: var(--muted); }
+.ai-layer-head strong { color: var(--navy); }
+.ai-layer-strategy { margin: 0.45rem 0 0; font-family: var(--display); font-size: 1.05rem; color: var(--navy); max-width: 62ch; }
+.model-badges { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.model-badge { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.45rem; background: var(--sheet); border: 1px solid var(--rule); border-left: 4px solid #76b900; border-radius: 10px; padding: 0.3rem 0.65rem; font-size: 0.84rem; cursor: help; }
+.model-role { font-weight: 700; color: var(--navy); }
+.model-name { color: var(--blue); font-weight: 700; }
+.model-ms { color: var(--muted); }
+.model-chip { display: inline-block; font-family: var(--body); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.01em; color: var(--navy); background: var(--duck); border: 1px solid var(--rule); border-left: 3px solid #76b900; border-radius: 6px; padding: 0 0.4rem; margin-left: 0.35rem; vertical-align: middle; }
+.landing { margin: 0.2rem 0 0 calc(44px + 0.85rem); color: var(--navy); font-size: 0.98rem; font-style: italic; max-width: 62ch; }
+.why-landing { margin-top: 0.3rem; }
+.why-landing .model-chip { margin-left: 0; margin-right: 0.3rem; font-style: normal; }
+.adapted { background: #eef6e2; border-left: 5px solid #76b900; border-radius: 14px; padding: 0.85rem 1.15rem; margin: 0 0 1.25rem; }
+.adapted p { margin: 0.25rem 0; }
+.adapted ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+.flagged { margin: 0 0 1.25rem; background: var(--sheet); border-radius: 14px; padding: 0.7rem 1.1rem; border: 1px solid var(--rule); }
+.flagged summary { cursor: pointer; font-weight: 700; min-height: 32px; display: flex; align-items: center; gap: 0.5rem; }
+.flagged ul { margin: 0.5rem 0 0.2rem; padding-left: 1.2rem; }
+.tiny { font-size: 0.85rem; }
+.follow-h { font-weight: 700; margin: 0.8rem 0 0.2rem; color: var(--heather); font-size: 0.95rem; }
+.follow li { color: var(--muted); }
+.local-history { margin-top: 1rem; background: var(--amber-tint); border-radius: 14px; padding: 0.8rem 1.1rem; }
+.local-history h4 { margin: 0 0 0.3rem; }
+.local-history ul { margin: 0; padding-left: 1.1rem; }
+.local-history a { color: var(--blue); font-weight: 700; }
+.script-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.9rem; margin-top: 1.1rem; }
+.btn-small { min-height: 44px; padding: 0.35rem 0.95rem; font-size: 0.98rem; }
+.script { margin-top: 1.1rem; border-top: 1px dashed var(--rule); padding-top: 0.8rem; }
+.script h4 { margin: 0 0 0.4rem; }
+.script ol { margin: 0; padding-left: 1.3rem; display: grid; gap: 0.45rem; }
+.script-cue { display: block; color: var(--muted); font-size: 0.92rem; }
+.script-say { display: block; font-size: 1.04rem; }
+.how { margin-top: 1.1rem; padding-top: 0.8rem; border-top: 1px solid var(--rule); }
+.how-h { font-weight: 700; margin: 0 0 0.35rem; }
+.chip-loved.on { background: #e5f2d3; border-color: #4f7d0b; color: #2f4d05; }
+.chip-no.on { background: #fbe9ea; border-color: var(--error); color: var(--error); }
+.how-note, .avoid-input { width: 100%; margin-top: 0.5rem; font: inherit; padding: 0.55rem 0.75rem; border: 2px solid var(--control); border-radius: 10px; min-height: 44px; }
+.how-note:focus, .avoid-input:focus { outline: 3px solid var(--amber); outline-offset: 1px; }
+.next-week { border: 2px solid #76b900; border-radius: 18px; padding: 1.1rem 1.25rem; background: rgba(255, 255, 255, 0.55); }
+.next-week h3 { margin: 0 0 0.3rem; }
+.site-foot { max-width: 1160px; margin: 3rem auto 0; padding: 1.2rem 1.25rem 2rem; color: var(--muted); font-size: 0.86rem; border-top: 1px solid var(--rule); }
+.site-foot p { margin: 0; }
