@@ -29,6 +29,12 @@ export const metadata: Metadata = {
   title: "Memory Lane: a week of reminiscence for each resident",
   description:
     "Memory Lane helps care-home activity staff plan a week of personalised, era-matched reminiscence activities using Qloo's taste graph.",
+  metadataBase: new URL("https://memory-lane-azure-six.vercel.app"),
+  openGraph: {
+    title: "Memory Lane",
+    description: "A printable week of era-matched songs, films, telly, food and places for one care-home resident, built live by an agent on Qloo's taste graph.",
+    type: "website",
+  },
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#17263A" };

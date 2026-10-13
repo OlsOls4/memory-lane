@@ -125,13 +125,13 @@ export async function gatherResident(
   opts: { domains?: Domain[] } = {},
 ): Promise<ResidentContext> {
   const era = eraFor(p.birthYear);
-  const want = new Set<Domain>(opts.domains || ["music", "film", "tv", "books", "audio", "food", "travel"]);
+  const want = new Set<Domain>(opts.domains || ["music", "film", "tv", "books", "food", "travel"]);
   const warnings: string[] = [];
   const releaseCountry = countryForRelease(p.country);
 
   const who = displayName(p);
   const loved = p.favourites.loved || [];
-  svc.note("agent.plan", `Plan for ${displayName(p, true)} (born ${p.birthYearApprox ? "about " : ""}${p.birthYear}${p.hometown ? `, grew up in ${p.hometown}` : `, ${p.country}`})`, [
+  svc.note("agent.plan", `Plan for ${displayName(p)} (born ${p.birthYearApprox ? "about " : ""}${p.birthYear}${p.hometown ? `, grew up in ${p.hometown}` : `, ${p.country}`})`, [
     `Formative window ${era.formativeStart}–${era.formativeEnd} (ages 10–25, the 'reminiscence bump')`,
     ...(loved.length
       ? [`Quick start: infer the domain of ${loved.map((x) => `"${x}"`).join(", ")} with a cross-type /search plus /v2/tags`]

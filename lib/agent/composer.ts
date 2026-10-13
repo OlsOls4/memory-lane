@@ -156,7 +156,7 @@ function templateDays(ctx: ResidentContext): DayPlan[] {
       theme: uk ? "Stories and the wireless" : "Stories and the radio",
       domain: books.length ? "books" : "audio",
       title: "Stories and voices",
-      intro: "A gentle read-aloud and a listen, chosen from books and audio that echo their tastes.",
+      intro: audio.length ? "A gentle read-aloud and a listen, chosen from books and audio that echo their tastes." : "A gentle read-aloud from books of their era that echo their tastes, then a listen to old radio.",
       durationMins: sessionLength(p, 30),
       steps: [
         books[0] ? `Read a short passage from ${books[0].name} aloud.` : "Read a short, familiar passage aloud.",
