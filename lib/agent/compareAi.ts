@@ -26,7 +26,8 @@ const TYPES: Record<AiOnlyPick["domain"], string> = {
   travel: "urn:entity:destination",
 };
 
-const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9 ]/g, "").replace(/^the /, "").trim();
+const norm = (s: string) =>
+  s.toLowerCase().normalize("NFKD").replace(/&/g, " and ").replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").replace(/^the /, "").trim();
 
 export async function compareWithAiOnly(profile: ResidentProfile, onStep?: StepListener): Promise<AiComparison | null> {
   const picks = await aiOnlyPicks(profile);

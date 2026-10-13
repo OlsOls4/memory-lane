@@ -256,9 +256,12 @@ export default function GroupPage() {
                 <div className="care-notes common">
                   <h3>What they have in common</h3>
                   {(() => {
-                    const top = [...session.sharedThemes].sort((a, b) => b.score - a.score).slice(0, 8);
-                    const max = Math.max(...top.map((t) => t.score), 0.01);
-                    const common = Math.round((top.slice(0, 5).reduce((n, t) => n + t.score, 0) / Math.min(5, top.length)) * 100);
+                    // Qloo compare scores each pair of residents; tags are the themes behind that score.
+                    const pairs = Array.from(
+                      session.sharedThemes.reduce((m, t) => m.set(t.between, Math.max(m.get(t.between) || 0, t.score)), new Map<string, number>()),
+                    ).sort((a, b) => b[1] - a[1]);
+                    const common = Math.round((pairs.reduce((n, p) => n + p[1], 0) / Math.max(1, pairs.length)) * 100);
+                    const tags = Array.from(new Set(session.sharedThemes.map((t) => t.tag))).slice(0, 10);
                     return (
                       <>
                         <p className="common-score" aria-label={`Common ground score ${common} out of 100`}>
@@ -266,16 +269,21 @@ export default function GroupPage() {
                           <span>common-ground score, from Qloo compare</span>
                         </p>
                         <ul className="theme-bars">
-                          {top.map((t) => (
-                            <li key={t.tag + t.between}>
+                          {pairs.map(([between, score]) => (
+                            <li key={between}>
                               <span className="theme-bar-label">
-                                <strong>{t.tag}</strong> <span>{t.score.toFixed(2)}</span>
+                                <strong>{between}</strong> <span>{Math.round(score * 100)}</span>
                               </span>
                               <span className="theme-bar" aria-hidden="true">
-                                <span style={{ width: `${Math.max(6, (t.score / max) * 100)}%` }} />
+                                <span style={{ width: `${Math.max(6, score * 100)}%` }} />
                               </span>
-                              <small>{t.between}</small>
                             </li>
+                          ))}
+                        </ul>
+                        <p className="small muted" style={{ margin: "0.9rem 0 0.4rem" }}>Shared themes</p>
+                        <ul className="theme-chips">
+                          {tags.map((t) => (
+                            <li key={t}>{t}</li>
                           ))}
                         </ul>
                       </>

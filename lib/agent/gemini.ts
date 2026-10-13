@@ -8,7 +8,7 @@ export function geminiEnabled() {
 /** Last failure, for /api/status?probe=1 diagnostics (never contains the key). */
 export let lastGeminiError = "";
 
-const MODELS = () => Array.from(new Set([process.env.GEMINI_MODEL, "gemini-3-flash-preview", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash"].filter(Boolean) as string[]));
+const MODELS = () => Array.from(new Set([process.env.GEMINI_MODEL, "gemini-3-flash-preview", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.1-flash-lite"].filter(Boolean) as string[]));
 let workingModel = "";
 
 export function geminiModel() {
