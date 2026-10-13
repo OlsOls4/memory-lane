@@ -21,14 +21,36 @@ export function geminiModel() {
   return lastUsed || workingModel || MODELS()[0];
 }
 
-const OPENAI_COMPAT: Record<string, { url: string; key?: string; model: string }> = {
-  groq: { url: "https://api.groq.com/openai/v1/chat/completions", key: process.env.GROQ_API_KEY, model: process.env.GROQ_MODEL || "openai/gpt-oss-20b" },
-  openrouter: { url: "https://openrouter.ai/api/v1/chat/completions", key: process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_MODEL || "openai/gpt-oss-20b:free" },
+// Groq's free plan limits tokens per minute per model, so a 429 on one model moves to the next.
+const OPENAI_COMPAT: Record<string, { url: string; key?: string; models: string[] }> = {
+  groq: {
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    key: process.env.GROQ_API_KEY,
+    models: [process.env.GROQ_MODEL, "openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"].filter(Boolean) as string[],
+  },
+  openrouter: {
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    key: process.env.OPENROUTER_API_KEY,
+    models: [process.env.OPENROUTER_MODEL || "openai/gpt-oss-20b:free"],
+  },
 };
 
 async function callOpenAICompat<T>(name: string, prompt: string, timeoutMs: number): Promise<T | null> {
   const p = OPENAI_COMPAT[name];
   if (!p?.key) return null;
+  const deadline = Date.now() + timeoutMs;
+  for (const model of Array.from(new Set(p.models))) {
+    const left = deadline - Date.now();
+    if (left < 800) break;
+    const r = await callOneCompat<T>(name, p.url, p.key, model, prompt, left);
+    if (r.out) return r.out;
+    if (!r.retryable) break;
+  }
+  return null;
+}
+
+async function callOneCompat<T>(name: string, url: string, key: string, model: string, prompt: string, timeoutMs: number): Promise<{ out: T | null; retryable: boolean }> {
+  const p = { url, key, model };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -48,18 +70,18 @@ async function callOpenAICompat<T>(name: string, prompt: string, timeoutMs: numb
       cache: "no-store",
     });
     if (!res.ok) {
-      lastGeminiError = `${lastGeminiError} || ${name}: HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`.slice(-900);
-      return null;
+      lastGeminiError = `${lastGeminiError} || ${name}/${model}: HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`.slice(-900);
+      return { out: null, retryable: [400, 404, 413, 429, 500, 503].includes(res.status) };
     }
     const body = await res.json();
     const text: string | undefined = body?.choices?.[0]?.message?.content;
-    if (!text) return null;
+    if (!text) return { out: null, retryable: true };
     const out = JSON.parse(text.replace(/^```json\s*|\s*```$/g, "")) as T;
     lastUsed = `${name}:${p.model}`;
-    return out;
+    return { out, retryable: false };
   } catch (e: any) {
-    lastGeminiError = `${lastGeminiError} || ${name}: ${e?.name === "AbortError" ? "timed out" : String(e?.message || e).slice(0, 120)}`.slice(-900);
-    return null;
+    lastGeminiError = `${lastGeminiError} || ${name}/${model}: ${e?.name === "AbortError" ? "timed out" : String(e?.message || e).slice(0, 120)}`.slice(-900);
+    return { out: null, retryable: true };
   } finally {
     clearTimeout(timer);
   }
@@ -79,7 +101,7 @@ export async function geminiJSON<T>(prompt: string, timeoutMs = 25000, only?: st
       if (!process.env.GEMINI_API_KEY) continue;
       out = await callGemini<T>(prompt, left);
       if (out) lastUsed = `gemini:${workingModel || MODELS()[0]}`;
-    } else out = await callOpenAICompat<T>(name, prompt, Math.min(left, 10000));
+    } else out = await callOpenAICompat<T>(name, prompt, Math.min(left, 14000));
     if (out) return out;
   }
   return null;

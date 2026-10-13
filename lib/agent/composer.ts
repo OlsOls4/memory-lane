@@ -331,7 +331,7 @@ export async function buildWeekPlan(input: ResidentProfile, onStep?: StepListene
       svc.record({
         n: svc.trace.length + 1,
         tool: "llm.compose",
-        purpose: "Gemini writes the wording around the Qloo-chosen items",
+        purpose: "The AI writes the wording around the Qloo-chosen items",
         summary: ["7 days rewritten; items untouched", `model ${geminiModel()}`],
         ms: Date.now() - started,
         mock: false,
@@ -340,8 +340,8 @@ export async function buildWeekPlan(input: ResidentProfile, onStep?: StepListene
       svc.record({
         n: svc.trace.length + 1,
         tool: "template.compose",
-        purpose: "Gemini failed or returned invalid JSON; fell back to the template composer",
-        summary: ["template wording used"],
+        purpose: "The AI was unavailable or returned invalid wording; fell back to the template composer",
+        summary: ["template wording used", lastGeminiError.slice(-160)].filter(Boolean),
         ms: Date.now() - started,
         mock: false,
       });
