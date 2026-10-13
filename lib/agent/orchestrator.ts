@@ -418,7 +418,7 @@ export function toItem(ctx: ResidentContext, e: QEntity, domain: Domain, isFavou
     if (e.affinity !== undefined) signals.push(`affinity ${e.affinity.toFixed(2)}`);
   }
   // Artist/person "years" in Qloo data can be a birth year, so only dated works get a year in the reason.
-  if (e.year && e.type !== T.artist && e.type !== T.person) {
+  if (e.year && domain !== "music" && e.type !== T.artist && e.type !== T.person) {
     const inBump = e.year >= era.formativeStart && e.year <= era.formativeEnd;
     parts.push(
       inBump
@@ -437,7 +437,7 @@ export function toItem(ctx: ResidentContext, e: QEntity, domain: Domain, isFavou
     entityId: e.id,
     name: e.name,
     domain,
-    year: e.year,
+    year: domain === "music" ? undefined : e.year,
     isFavourite,
     affinity: e.affinity,
     eraVerified: !!(e as any).eraVerified,

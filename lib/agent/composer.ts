@@ -455,14 +455,15 @@ export async function buildGroupSession(residents: ResidentProfile[], onStep?: S
     const who = appeal(e.id, e.tags.map((t: any) => t.id));
     const signals = [`appeals to ${who.length}/${group.length}`];
     if (e.affinity !== undefined) signals.push(`affinity ${e.affinity.toFixed(2)}`);
-    if (e.year) signals.push(String(e.year));
+    const dated = domain !== "music" ? e.year : undefined; // artist "years" can be birth years
+    if (dated) signals.push(String(dated));
     return {
       entityId: e.id,
       name: e.name,
       domain,
-      year: e.year,
+      year: dated,
       affinity: e.affinity,
-      why: `Blended Qloo signals from all ${group.length} residents${e.year && !/artist|person/.test(e.type) ? `; from ${e.year}` : ""}. Likely to land with ${who.join(", ") || "the group"}.`,
+      why: `Blended Qloo signals from all ${group.length} residents${dated ? `; from ${dated}` : ""}. Likely to land with ${who.join(", ") || "the group"}.`,
       signals,
       appealsTo: who,
     };
