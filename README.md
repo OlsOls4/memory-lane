@@ -141,7 +141,7 @@ Unknown names still work in mock mode because the mock creates a clearly-labelle
 - Food places use `filter.tags=urn:tag:genre:place:restaurant` and exclude hotels.
 - Compare scores live at `results.tags[].query.score`.
 - The hackathon key allows 5 requests per second, so the client spaces calls, retries 429s, caps each call's wait and
-  caches identical requests within a warm function. Your first name is never sent to Qloo; only taste items, a decade window and a place.
+  caches identical requests within a warm function. A resident's name is never sent to Qloo; only taste items, a decade window and a place.
 
 **No real Qloo response data is committed to this repository**, as the hackathon terms require. `.gitignore` excludes
 `qloo-cache/` and `*.qloo.json` for any local captures.
