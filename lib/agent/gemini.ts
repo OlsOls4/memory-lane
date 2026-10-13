@@ -29,7 +29,7 @@ export async function geminiJSON<T>(prompt: string, timeoutMs = 25000, only?: st
     const left = deadline - Date.now();
     if (left < 1000) break;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), left);
+    const timer = setTimeout(() => ctrl.abort(), Math.min(left, 8000)); // a hung model must not eat the whole budget
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: "POST",
@@ -56,9 +56,9 @@ export async function geminiJSON<T>(prompt: string, timeoutMs = 25000, only?: st
       if (!text) return null;
       return JSON.parse(text.replace(/^```json\s*|\s*```$/g, "")) as T;
     } catch (e: any) {
-      lastGeminiError = String(e?.name === "AbortError" ? `timeout after ${timeoutMs}ms` : e?.message || e).slice(0, 300);
-      console.error("gemini", lastGeminiError);
-      return null;
+      lastGeminiError = `${lastGeminiError} || ${model}: ${e?.name === "AbortError" ? "timed out" : String(e?.message || e).slice(0, 120)}`.slice(-900);
+      if (e instanceof SyntaxError) return null;
+      continue;
     } finally {
       clearTimeout(timer);
     }
