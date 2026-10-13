@@ -12,29 +12,58 @@ export interface QlooTransport {
   get(path: string, params: Record<string, string>): Promise<any>;
 }
 
+// The hackathon key allows 5 requests/second and 10k/month, so space calls out,
+// retry politely on 429, and reuse identical responses within a warm instance.
+const MIN_GAP_MS = 230;
+const CACHE_TTL_MS = 30 * 60 * 1000;
+let nextSlot = 0;
+const cache = new Map<string, { at: number; body: any }>();
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function takeSlot() {
+  const now = Date.now();
+  const at = Math.max(now, nextSlot);
+  nextSlot = at + MIN_GAP_MS;
+  if (at > now) await sleep(at - now);
+}
+
 class HttpTransport implements QlooTransport {
   readonly mock = false;
   constructor(private apiKey: string, private baseUrl: string) {}
   async get(path: string, params: Record<string, string>): Promise<any> {
     const url = new URL(path, this.baseUrl);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-    const res = await fetch(url.toString(), {
-      method: "GET",
-      headers: { "X-Api-Key": this.apiKey, Accept: "application/json" },
-      cache: "no-store",
-    });
-    const text = await res.text();
-    let body: any;
-    try {
-      body = text ? JSON.parse(text) : {};
-    } catch {
-      body = { raw: text };
+    const key = url.toString();
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.body;
+
+    for (let attempt = 0; ; attempt++) {
+      await takeSlot();
+      const res = await fetch(key, {
+        method: "GET",
+        headers: { "X-Api-Key": this.apiKey, Accept: "application/json" },
+        cache: "no-store",
+      });
+      const text = await res.text();
+      let body: any;
+      try {
+        body = text ? JSON.parse(text) : {};
+      } catch {
+        body = { raw: text };
+      }
+      if (res.status === 429 && attempt < 4) {
+        const reset = parseFloat(res.headers.get("x-second-ratelimit-reset") || "");
+        await sleep((Number.isFinite(reset) && reset > 0 && reset < 5 ? reset * 1000 : 600) + attempt * 300 + Math.random() * 200);
+        continue;
+      }
+      if (!res.ok) {
+        const msg = body?.error?.message || body?.error_msg || body?.message || body?.errors?.[0]?.message || text.slice(0, 200);
+        throw new Error(`Qloo ${res.status} on ${path}: ${msg}`);
+      }
+      if (cache.size > 500) cache.clear();
+      cache.set(key, { at: Date.now(), body });
+      return body;
     }
-    if (!res.ok) {
-      const msg = body?.error?.message || body?.message || body?.errors?.[0]?.message || text.slice(0, 200);
-      throw new Error(`Qloo ${res.status} on ${path}: ${msg}`);
-    }
-    return body;
   }
 }
 
