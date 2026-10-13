@@ -11,8 +11,8 @@ common ground between several residents.
 (a year, a decade or an age), where they grew up (optional), and **one thing they loved**, in any domain. The agent works
 out whether that is a singer, a film, a TV show, a food or a pastime through Qloo, and makes a full week from it.
 
-> Built for the [Qloo Agentic Hackathon](https://qloo.devpost.com/). Status: first working version. Runs end to end in mock mode
-> with zero keys. Live Qloo and Gemini switch on when you add the keys.
+> Built for the [Qloo Agentic Hackathon](https://qloo.devpost.com/). The live demo runs on the real Qloo hackathon API.
+> Without a key it still runs end to end in mock mode; Gemini wording is optional.
 
 ## What it does
 
@@ -132,6 +132,16 @@ the documented responses. It uses a small tag-overlap model over **hand-written 
 (`lib/qloo/fixtures.ts`). The fixture IDs (`mock-…`), tag IDs (`urn:tag:mock:…`) and scores are invented, and the
 cafés marked "(illustrative)" are fictional. Mock and live mode go through the same normaliser and agent code.
 Unknown names still work in mock mode because the mock creates a clearly-labelled placeholder entity.
+
+## Live Qloo notes (verified October 2026)
+
+- Location filters take `"Town, Country"` (`filter.location.query`, `signal.location.query`): a bare "Glasgow" can resolve to Glasgow, Kentucky.
+- With no favourite singer, the music and era-check queries use Qloo music-genre tags for the resident's formative decades
+  (e.g. crooner, skiffle, Merseybeat), plus `filter.tags=urn:tag:genre:person:musician` and a birth-date window for performers.
+- Food places use `filter.tags=urn:tag:genre:place:restaurant` and exclude hotels.
+- Compare scores live at `results.tags[].query.score`.
+- The hackathon key allows 5 requests per second, so the client spaces calls, retries 429s, caps each call's wait and
+  caches identical requests within a warm function. Your first name is never sent to Qloo; only taste items, a decade window and a place.
 
 **No real Qloo response data is committed to this repository**, as the hackathon terms require. `.gitignore` excludes
 `qloo-cache/` and `*.qloo.json` for any local captures.

@@ -39,6 +39,9 @@ const COMMON = [
   "signal.demographics.gender",
   "signal.interests.entities",
   "signal.interests.tags",
+  "signal.location",
+  "signal.location.query",
+  "signal.location.radius",
   // Documented on the Insights deep dive as global request options:
   "feature.explainability",
   "signal.interests.entities.weight",

@@ -109,7 +109,9 @@ export async function readLoved(svc: QlooService, input: string): Promise<LovedR
     return inter / Math.min(A.size, B.size) >= 0.6;
   };
   const loose = hit && hn && (hn.includes(q) || q.includes(hn) || overlap(hn, q));
-  if (hit && hn === q) return { input, seed: hit, tag: realTag && tn === q ? tag : undefined, asFood };
+  // An exact entity match wins outright: a same-named tag (e.g. a dish called "Frank Sinatra")
+  // would only add noise to the taste signal.
+  if (hit && hn === q) return { input, seed: hit, asFood: false };
   if (realTag && tn === q) return { input, tag, asFood };
   if (loose && !asFood) return { input, seed: hit };
   if (tag) return { input, tag, asFood };
@@ -193,6 +195,9 @@ export async function gatherResident(
     "filter.release_year.max": era.formativeEnd,
   };
   const hobbyCsv = csv(hobbyTags.map((t) => t.id));
+  // Era sound: Qloo music-genre tags for the decades of their reminiscence bump. These give the
+  // artist and performer queries a period signal even when no favourite singer was named.
+  const genreCsv = csv(eraGenreTags(era.formativeStart, era.formativeEnd, releaseCountry !== "United States"));
   const results: Record<Domain, QEntity[]> = { music: [], film: [], tv: [], books: [], audio: [], food: [], travel: [] };
 
   // ---- Phase 2: insights per domain (parallel) ---------------------------------------
@@ -211,7 +216,8 @@ export async function gatherResident(
         "filter.type": T.artist,
         ...eraBlock,
         "signal.interests.entities": csv(ids([...artists, ...films, ...tv])),
-        "signal.interests.tags": hobbyCsv,
+        // Mixed entity/hobby + genre signals can stall Qloo, so era genres stand in only when no favourite artist is known.
+        "signal.interests.tags": artists.length ? undefined : genreCsv,
         "signal.demographics.age": age,
         "filter.exclude.entities": csv(ids(artists)),
         "feature.explainability": true,
@@ -227,7 +233,9 @@ export async function gatherResident(
         .insights(
           {
             "filter.type": T.person,
-            "signal.interests.entities": csv(ids(artists)),
+            // Era-genre signal + musician tag + birth-date window: who was actually singing then.
+            "signal.interests.tags": genreCsv,
+            "filter.tags": "urn:tag:genre:person:musician",
             "signal.demographics.age": age,
             "filter.date_of_birth.min": era.performerDobMin,
             "filter.date_of_birth.max": era.performerDobMax,
@@ -279,7 +287,7 @@ export async function gatherResident(
       "books",
       {
         "filter.type": T.book,
-        "signal.interests.entities": csv(ids([...books, ...films, ...tv])),
+        "signal.interests.entities": csv(ids([...books, ...films, ...tv, ...artists])),
         "signal.interests.tags": hobbyCsv,
         "signal.demographics.age": age,
         "filter.publication_year.min": era.formativeStart - 20,
@@ -298,7 +306,7 @@ export async function gatherResident(
         "filter.type": T.podcast,
         ...eraBlock,
         "signal.interests.entities": csv(ids([...artists, ...tv])),
-        "signal.interests.tags": hobbyCsv,
+        "signal.interests.tags": artists.length || tv.length || hobbyCsv ? hobbyCsv : genreCsv,
         "signal.demographics.age": age,
         "feature.explainability": true,
         take: 5,
@@ -307,18 +315,24 @@ export async function gatherResident(
     );
 
   const place = p.hometown.trim() || p.country; // Quick start: fall back to the country when no town is given
+  // Qloo's location lookup is ambiguous without a country ("Glasgow" can resolve to Kentucky).
+  const placeQuery = p.hometown.trim()
+    ? p.hometown.includes(",") ? p.hometown.trim() : `${p.hometown.trim()}, ${p.country}`
+    : p.country;
   if (want.has("food"))
     jobs.push(
       (async () => {
         const base = {
           "filter.type": T.place,
+          "filter.tags": "urn:tag:genre:place:restaurant",
+          "filter.exclude.tags": "urn:tag:genre:place:hotel",
           "signal.interests.tags": csv(foodTags.map((t) => t.id)),
           "signal.interests.entities": csv(ids(allSeeds)),
           "signal.demographics.age": age,
           take: 6,
         };
         let r = await svc.insights(
-          { ...base, "filter.location.query": place },
+          { ...base, "filter.location.query": placeQuery },
           `Taste of home: food places in ${place} matching ${foodTags.map((t) => t.name).join(", ") || "their tastes"}`,
         );
         if (!r.length) {
@@ -334,17 +348,20 @@ export async function gatherResident(
       "travel",
       {
         "filter.type": T.destination,
-        "signal.interests.entities": csv(ids([hometown, ...allSeeds])),
+        "signal.location.query": placeQuery,
+        "signal.interests.entities": csv(ids(allSeeds)),
         "signal.interests.tags": hobbyCsv,
         "signal.demographics.age": age,
-        "filter.exclude.entities": csv(ids([hometown])),
         "feature.explainability": true,
-        take: 5,
+        take: 6,
       },
       `Armchair travel: destinations with affinity to ${place} and their tastes`,
     );
 
   await Promise.all(jobs);
+  // The hometown itself is the anchor, not a destination to suggest.
+  const homeName = (hometown?.name || p.hometown.split(",")[0] || "").trim().toLowerCase();
+  if (homeName) results.travel = results.travel.filter((d) => d.name.trim().toLowerCase() !== homeName).slice(0, 5);
 
   // ---- Phase 3: verify ---------------------------------------------------------------
   if (want.has("music")) {
@@ -427,4 +444,21 @@ export function toItem(ctx: ResidentContext, e: QEntity, domain: Domain, isFavou
     signals,
     location: e.location,
   };
+}
+
+/** Qloo music-genre tag IDs for the decades a person spent aged roughly 10–25. */
+function eraGenreTags(start: number, end: number, british: boolean): string[] {
+  const g = (x: string) => `urn:tag:genre:music:${x}`;
+  const byDecade: Record<number, string[]> = {
+    1920: ["jazz", "swing", "crooner"],
+    1930: ["swing", "big_band", "crooner"],
+    1940: ["big_band", "swing", "crooner", "traditional_pop"],
+    1950: ["traditional_pop", "rock", "doo_wop", "crooner", ...(british ? ["skiffle"] : [])],
+    1960: ["traditional_pop", "motown", ...(british ? ["merseybeat"] : ["folk"])],
+    1970: ["glam_rock", "disco", "folk", ...(british ? ["northern_soul"] : [])],
+    1980: ["disco", "pop"],
+  };
+  const out: string[] = [];
+  for (let d = Math.floor(start / 10) * 10; d <= end; d += 10) for (const t of byDecade[Math.min(Math.max(d, 1920), 1980)] || []) if (!out.includes(t)) out.push(t);
+  return out.slice(0, 6).map(g);
 }

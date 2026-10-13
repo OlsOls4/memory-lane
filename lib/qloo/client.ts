@@ -39,11 +39,20 @@ class HttpTransport implements QlooTransport {
 
     for (let attempt = 0; ; attempt++) {
       await takeSlot();
-      const res = await fetch(key, {
-        method: "GET",
-        headers: { "X-Api-Key": this.apiKey, Accept: "application/json" },
-        cache: "no-store",
-      });
+      // Some heavier signal combinations occasionally stall on Qloo's side; a retry usually
+      // returns at once, so cap each attempt rather than letting one call eat the whole budget.
+      let res: Response;
+      try {
+        res = await fetch(key, {
+          method: "GET",
+          headers: { "X-Api-Key": this.apiKey, Accept: "application/json" },
+          cache: "no-store",
+          signal: AbortSignal.timeout(attempt === 0 ? 14000 : 12000),
+        });
+      } catch (e: any) {
+        if (attempt < 1) continue;
+        throw new Error(`Qloo timeout on ${path}`);
+      }
       const text = await res.text();
       let body: any;
       try {
@@ -265,6 +274,7 @@ export function parseCompare(body: any): { tagId: string; name: string; score: n
       const q = t?.query || {};
       const aff =
         num(q.affinity) ??
+        num(q.score) ?? // live hackathon shape: results.tags[].query.score
         (num(q.a?.affinity) !== undefined && num(q.b?.affinity) !== undefined
           ? Math.min(num(q.a?.affinity)!, num(q.b?.affinity)!)
           : undefined) ??
