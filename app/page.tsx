@@ -32,6 +32,7 @@ function quickPayload(q: QuickInput, country: string, base: ResidentProfile) {
     hometown: place.hometown,
     country: place.country,
     favourites: { ...cleanResident(base).favourites, loved: [...new Set(loved)] },
+    story: q.story?.trim() || undefined,
   };
 }
 

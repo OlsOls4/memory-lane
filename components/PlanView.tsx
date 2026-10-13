@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import type { WeekPlan } from "@/lib/types";
 import ItemCard from "./ItemCard";
 import TraceView from "./TraceView";
+import AiCompare from "./AiCompare";
 import TuningDial from "./TuningDial";
 
 const slug = (s: string) => `day-${s.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
@@ -176,6 +177,7 @@ export default function PlanView({ plan, rail }: { plan: WeekPlan; rail?: React.
       </div>
 
       <TraceView trace={plan.trace} composer={plan.composer} />
+      <AiCompare plan={plan} />
       <p className="footnote">
         These ideas support the resident’s care plan and never replace it. Recommendations powered by Qloo’s taste AI.
       </p>

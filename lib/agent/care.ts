@@ -115,7 +115,18 @@ export interface QuickInput {
   born: string; // "1946", "1940s" or "age 82"
   place: string; // town, optionally ", Country"
   loved: string;
+  /** Optional free-text notes, read by the AI planner when Gemini is configured. */
+  story?: string;
 }
+
+export const STORY_SAMPLE: QuickInput = {
+  firstName: "Jean",
+  born: "1941",
+  place: "Leeds",
+  loved: "",
+  story:
+    "Trained as a nurse at Leeds General Infirmary. Danced every Saturday night at the Mecca ballroom and adored Dusty Springfield. Loved Saturday-night variety shows on the telly and fish and chips by the sea at Scarborough. Needs soft foods now and is hard of hearing.",
+};
 
 export const QUICK_SAMPLES: QuickInput[] = [
   { firstName: "Margaret", born: "1940s", place: "Liverpool", loved: "Cilla Black" },

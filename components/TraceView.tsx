@@ -8,6 +8,8 @@ const LABEL: Record<string, string> = {
   "qloo.tags": "Qloo tags",
   "qloo.insights": "Qloo insights",
   "qloo.compare": "Qloo compare",
+  "llm.plan": "AI planner",
+  "llm.review": "AI care review",
   "llm.compose": "Gemini wording",
   "template.compose": "Template wording",
 };

@@ -1,7 +1,8 @@
 "use client";
 
 import { parseBirth, parseBornText } from "@/lib/validate";
-import { eraFor, type QuickInput } from "@/lib/agent/care";
+import { useEffect, useState } from "react";
+import { STORY_SAMPLE, eraFor, type QuickInput } from "@/lib/agent/care";
 import TuningDial from "./TuningDial";
 
 export const COUNTRIES = ["United Kingdom", "United States", "Ireland", "Canada", "Australia", "New Zealand"];
@@ -40,7 +41,15 @@ export default function QuickStart({
         : born?.birthDecade
           ? `Born in the ${born.birthDecade}`
           : `About ${born?.age}, so born around ${year?.year}`;
-  const ready = !!year && !!value.loved.trim();
+  const [ai, setAi] = useState(false);
+  useEffect(() => {
+    fetch("/api/status")
+      .then((r) => r.json())
+      .then((st) => setAi(st.composer === "gemini"))
+      .catch(() => {});
+  }, []);
+  const story = (value.story || "").trim();
+  const ready = !!year && (!!value.loved.trim() || (ai && story.length >= 20));
   const era = year ? eraFor(year.year) : null;
   const who = value.firstName.trim() || "They";
 
@@ -114,10 +123,33 @@ export default function QuickStart({
             </div>
           </div>
         </div>
+        {ai && (
+          <details className="story" open={!!story}>
+            <summary>
+              Know a bit more about them? <span className="opt">Add a few lines and the AI planner decides what to look up</span>
+            </summary>
+            <label className="field">
+              <span className="sr-only">A few lines about their life</span>
+              <textarea
+                rows={3}
+                maxLength={1200}
+                value={value.story || ""}
+                onChange={(e) => set({ story: e.target.value })}
+                placeholder="Worked at the Co-op, danced at the Locarno every Saturday, loved Dusty Springfield and Sunday roasts…"
+              />
+              <small className="hint">
+                Leave out surnames, addresses and medical details. These notes go to the AI planner only, never to Qloo.{" "}
+                <button type="button" className="btn-text" onClick={() => onChange({ ...STORY_SAMPLE })}>
+                  Try an example
+                </button>
+              </small>
+            </label>
+          </details>
+        )}
         <button type="submit" className="btn btn-primary btn-big" disabled={!ready || busy} aria-busy={busy}>
           {busy ? "Making the plan…" : "Make a week’s plan"}
         </button>
-        {!ready && !busy && <p className="hint ready-hint">Fill in when they were born and one thing they loved to make a plan.</p>}
+        {!ready && !busy && <p className="hint ready-hint">Fill in when they were born and one thing they loved{ai ? " (or a few lines about them)" : ""} to make a plan.</p>}
       </div>
     </form>
   );

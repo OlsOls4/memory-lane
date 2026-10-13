@@ -7,6 +7,7 @@ import { QlooService, type StepListener } from "../qloo/client";
 import { adaptationsFor, isUK } from "./care";
 import { gatherResident, toItem, type ResidentContext } from "./orchestrator";
 import { geminiEnabled, geminiJSON } from "./gemini";
+import { planFromStory, reviewCandidates } from "./llmAgent";
 import { displayName } from "../validate";
 
 const take = <X>(xs: X[], n: number) => xs.slice(0, n);
@@ -238,9 +239,80 @@ ${JSON.stringify(brief)}`;
   });
 }
 
-export async function buildWeekPlan(profile: ResidentProfile, onStep?: StepListener): Promise<WeekPlan> {
+/** LLM planner: turn staff's free-text notes into things to look up in Qloo. Never sent to Qloo itself. */
+async function applyStory(svc: QlooService, profile: ResidentProfile): Promise<ResidentProfile> {
+  if (!profile.story || !geminiEnabled()) return profile;
+  const started = Date.now();
+  const step = { n: svc.trace.length + 1, tool: "llm.plan" as const, purpose: "AI planner reads the staff notes and decides what to look up in Qloo", summary: [] as string[], ms: 0, mock: false };
+  const r = await planFromStory(profile.story, profile).catch(() => null);
+  step.ms = Date.now() - started;
+  if (!r) {
+    svc.record({ ...step, summary: ["Could not read the notes; using the quick-start answers only"], error: "planner unavailable" });
+    return profile;
+  }
+  const merge = (a: string[], b: string[]) => Array.from(new Set([...a, ...b].map((x) => x.trim()).filter(Boolean))).slice(0, 5);
+  const f = profile.favourites;
+  const next: ResidentProfile = {
+    ...profile,
+    hometown: profile.hometown || r.hometown || "",
+    country: profile.hometown ? profile.country : r.country || profile.country,
+    favourites: {
+      ...f,
+      artists: merge(f.artists, r.favourites.artists),
+      films: merge(f.films, r.favourites.films),
+      tvShows: merge(f.tvShows, r.favourites.tvShows),
+      books: merge(f.books, r.favourites.books),
+      foods: merge(f.foods, r.favourites.foods),
+      hobbies: merge(f.hobbies, r.favourites.hobbies),
+    },
+    constraints: {
+      ...profile.constraints,
+      softFoods: profile.constraints.softFoods || !!r.constraints.softFoods,
+      diabetic: profile.constraints.diabetic || !!r.constraints.diabetic,
+      hearing: profile.constraints.hearing !== "none" ? profile.constraints.hearing : r.constraints.hearing || "none",
+      vision: profile.constraints.vision !== "none" ? profile.constraints.vision : r.constraints.vision || "none",
+      dementiaStage: profile.constraints.dementiaStage !== "none" ? profile.constraints.dementiaStage : r.constraints.dementiaStage || "none",
+    },
+  };
+  const found = Object.entries(r.favourites).flatMap(([k, v]) => (v.length ? [`${k}: ${v.join(", ")}`] : []));
+  svc.record({ ...step, summary: [...(r.rationale.length ? r.rationale : found).slice(0, 4), ...(found.length ? [] : ["Nothing new to look up in the notes"])] });
+  return next;
+}
+
+/** Care-aware critic: removes unsuitable Qloo candidates; the plan then backfills from the remaining Qloo results. */
+async function applyReview(svc: QlooService, ctx: ResidentContext) {
+  if (!geminiEnabled()) return;
+  const started = Date.now();
+  const domains: Domain[] = ["music", "film", "tv", "books", "food", "travel"];
+  const subset = Object.fromEntries(domains.map((d) => [d, ctx.results[d]]));
+  const r = await reviewCandidates(ctx.profile, ctx.era, subset).catch(() => null);
+  const ms = Date.now() - started;
+  if (!r) {
+    svc.record({ n: svc.trace.length + 1, tool: "llm.review", purpose: "AI care review of Qloo's candidates", summary: ["Review unavailable; Qloo order kept"], ms, mock: false, error: "review unavailable" });
+    return;
+  }
+  const drop = new Set(r.drop.map((d) => d.id));
+  // Never remove a resident's own favourites.
+  const favIds = new Set([...ctx.seeds.artists, ...ctx.seeds.films, ...ctx.seeds.tv, ...ctx.seeds.books].map((e) => e.id));
+  for (const d of domains) {
+    const kept = ctx.results[d].filter((e) => !drop.has(e.id) || favIds.has(e.id));
+    if (kept.length >= 2 || ctx.results[d].length < 2) ctx.results[d] = kept;
+  }
+  svc.record({
+    n: svc.trace.length + 1,
+    tool: "llm.review",
+    purpose: "AI care review: remove Qloo candidates unsuitable for this resident, backfill from Qloo",
+    summary: r.drop.length ? r.drop.slice(0, 5).map((d) => `Removed ${d.name}: ${d.reason}`) : ["All candidates suitable; nothing removed"],
+    ms,
+    mock: false,
+  });
+}
+
+export async function buildWeekPlan(input: ResidentProfile, onStep?: StepListener): Promise<WeekPlan> {
   const svc = new QlooService(undefined, onStep);
+  const profile = await applyStory(svc, input);
   const ctx = await gatherResident(svc, profile);
+  await applyReview(svc, ctx);
   let days = templateDays(ctx);
   let composer: WeekPlan["composer"] = "template";
 

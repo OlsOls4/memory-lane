@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/", label: "One resident" },
   { href: "/group", label: "Group session" },
+  { href: "/agents", label: "Use in your AI" },
 ];
 
 export default function SiteNav() {

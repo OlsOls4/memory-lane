@@ -32,6 +32,8 @@ export interface ResidentProfile {
   country: string; // e.g. "United Kingdom", "United States"
   favourites: ResidentFavourites;
   constraints: ResidentConstraints;
+  /** Optional free-text notes from staff. Read only by the LLM planner (never sent to Qloo). */
+  story?: string;
 }
 
 /** Normalised Qloo entity as used inside the app (mapped from the raw API shape). */
@@ -62,6 +64,8 @@ export type ToolName =
   | "qloo.tags"
   | "qloo.insights"
   | "qloo.compare"
+  | "llm.plan"
+  | "llm.review"
   | "llm.compose"
   | "template.compose";
 

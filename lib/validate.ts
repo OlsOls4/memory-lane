@@ -77,6 +77,8 @@ export function parseResident(raw: any): ResidentProfile {
     },
   };
   if (approx) profile.birthYearApprox = true;
+  const story = str(raw?.story, 1200);
+  if (story) profile.story = story;
   return profile;
 }
 

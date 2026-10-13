@@ -432,3 +432,51 @@ input[aria-invalid="true"] { border-color: var(--error); }
   .agent-step { animation: none; }
   .agent-bar span, .agent-pill-bar span { transition: none; }
 }
+
+/* ---- With vs without Qloo ---- */
+.ai-compare { margin: 1.5rem 0; background: var(--sheet); border: 2px solid var(--rule); border-radius: 18px; padding: 1.2rem 1.4rem; }
+.ai-compare-head { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.ai-compare-head h3 { margin: 0; font-family: var(--display); color: var(--navy); font-size: 1.25rem; }
+.ai-compare-head p { margin: 0.2rem 0 0; }
+.ai-compare-score { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.8rem; margin: 1rem 0; }
+.ai-score { border-radius: 14px; padding: 0.8rem 1rem; background: var(--duck); display: grid; gap: 0.2rem; }
+.ai-score b { font-family: var(--display); font-size: 1.8rem; color: var(--navy); }
+.ai-score-qloo { background: #dcefe3; }
+.ai-score-bad { background: var(--amber-tint); }
+.ai-picks { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.35rem; }
+.ai-pick { display: grid; grid-template-columns: 7rem 1fr auto; gap: 0.2rem 0.8rem; padding: 0.5rem 0.7rem; border-radius: 10px; background: #f6f9f8; align-items: baseline; }
+.ai-pick-domain { color: var(--muted); font-size: 0.9rem; }
+.ai-pick-name { font-weight: 600; color: var(--navy); }
+.ai-pick-status { font-weight: 700; font-size: 0.85rem; padding: 0.1rem 0.55rem; border-radius: 99px; background: #dcefe3; color: #1f5c39; }
+.ai-wrong-era .ai-pick-status, .ai-not-found .ai-pick-status { background: var(--amber-tint); color: #7a4b00; }
+.ai-pick-note { grid-column: 2 / -1; color: var(--muted); font-size: 0.9rem; }
+@media (max-width: 560px) { .ai-pick { grid-template-columns: 1fr auto; } .ai-pick-domain { grid-column: 1 / -1; } }
+
+/* ---- Story notes for the AI planner ---- */
+.story { margin: 0.4rem 0 1rem; border: 2px dashed var(--rule); border-radius: 14px; padding: 0.7rem 0.9rem; background: #fbfdfc; }
+.story summary { cursor: pointer; font-weight: 600; color: var(--navy); }
+.story summary .opt { font-weight: 400; color: var(--muted); }
+.story textarea { width: 100%; margin-top: 0.6rem; font: inherit; padding: 0.7rem 0.8rem; border: 2px solid var(--control); border-radius: 10px; resize: vertical; min-height: 5.5rem; }
+.story textarea:focus { outline: 3px solid var(--amber); outline-offset: 1px; }
+
+/* ---- Group common-ground chart ---- */
+.common-score { display: flex; align-items: baseline; gap: 0.6rem; margin: 0.3rem 0 0.8rem; }
+.common-score b { font-family: var(--display); font-size: 2.4rem; color: var(--heather); line-height: 1; }
+.common-score span { color: var(--muted); font-size: 0.9rem; }
+.theme-bars { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.6rem; }
+.theme-bars li { display: grid; gap: 0.2rem; }
+.theme-bar-label { display: flex; justify-content: space-between; gap: 0.5rem; }
+.theme-bar-label span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.theme-bar { height: 8px; border-radius: 99px; background: var(--duck); overflow: hidden; }
+.theme-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--heather), var(--blue)); }
+.theme-bars small { color: var(--muted); }
+@media print { .theme-bar span { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+
+/* ---- Agents (MCP) page ---- */
+.agents h2 { font-family: var(--display); color: var(--navy); font-size: 1.3rem; margin: 1.6rem 0 0.5rem; }
+.agents h2:first-child { margin-top: 0; }
+.code { background: var(--navy); color: #eef4f2; padding: 0.9rem 1rem; border-radius: 12px; overflow-x: auto; font-family: var(--mono); font-size: 0.9rem; white-space: pre; }
+.tool-list { list-style: none; padding: 0; display: grid; gap: 0.7rem; }
+.tool-list li { display: grid; gap: 0.2rem; }
+.tool-list code { font-family: var(--mono); color: var(--blue); font-weight: 700; }
+.quote { font-style: italic; border-left: 4px solid var(--amber); padding-left: 0.8rem; }

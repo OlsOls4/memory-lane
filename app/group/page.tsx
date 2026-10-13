@@ -255,14 +255,32 @@ export default function GroupPage() {
               {session.sharedThemes.length > 0 && (
                 <div className="care-notes common">
                   <h3>What they have in common</h3>
-                  <ul className="themes">
-                    {session.sharedThemes.map((t) => (
-                      <li key={t.tag + t.between}>
-                        <strong>{t.tag}</strong>
-                        <span>{t.between}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  {(() => {
+                    const top = [...session.sharedThemes].sort((a, b) => b.score - a.score).slice(0, 8);
+                    const max = Math.max(...top.map((t) => t.score), 0.01);
+                    const common = Math.round((top.slice(0, 5).reduce((n, t) => n + t.score, 0) / Math.min(5, top.length)) * 100);
+                    return (
+                      <>
+                        <p className="common-score" aria-label={`Common ground score ${common} out of 100`}>
+                          <b>{common}</b>
+                          <span>common-ground score, from Qloo compare</span>
+                        </p>
+                        <ul className="theme-bars">
+                          {top.map((t) => (
+                            <li key={t.tag + t.between}>
+                              <span className="theme-bar-label">
+                                <strong>{t.tag}</strong> <span>{t.score.toFixed(2)}</span>
+                              </span>
+                              <span className="theme-bar" aria-hidden="true">
+                                <span style={{ width: `${Math.max(6, (t.score / max) * 100)}%` }} />
+                              </span>
+                              <small>{t.between}</small>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    );
+                  })()}
                   <p className="understood-note">Found with Qloo compare.</p>
                 </div>
               )}
