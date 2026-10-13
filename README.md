@@ -81,6 +81,28 @@ The LLM never picks items. It gets the Qloo-chosen items and writes titles, step
 stage, with instructions to use only the listed items by name. This keeps every recommendation grounded in Qloo and
 keeps the app working with no LLM at all.
 
+## Use it from any AI agent (MCP)
+
+Memory Lane is also a remote MCP server at `https://memory-lane-azure-six.vercel.app/api/mcp` (Streamable HTTP, stateless, no sign-in). Tools:
+
+- `plan_reminiscence_week`: a 7-day plan for one resident (born, loved, optional hometown and care flags).
+- `plan_group_session`: a 45-minute session for 2 to 6 residents, using Qloo compare.
+- `reminiscence_years`: the years someone is most likely to remember (no Qloo call).
+
+Add it in Claude (Settings → Connectors → Add custom connector) or any MCP client with `{"mcpServers":{"memory-lane":{"url":"https://memory-lane-azure-six.vercel.app/api/mcp"}}}`. See `/agents` in the app.
+
+## AI steps (optional, with `GEMINI_API_KEY`)
+
+When a Gemini key is set, three LLM steps join the agent loop. None of them can add an item that did not come from Qloo:
+
+1. **AI planner** (`llm.plan`): reads a few lines of staff notes ("danced at the Mecca ballroom, loved Dusty Springfield, soft foods now") and decides what to look up in Qloo: artists, titles, hobby and food tags, care flags. The notes go to Gemini only, never to Qloo.
+2. **AI care review** (`llm.review`): a critic checks Qloo's candidates for this resident and removes anything distressing (psychiatric hospitals, graphic war, horror) or from the wrong era. The plan backfills from the remaining Qloo results.
+3. **Wording** (`llm.compose`): writes the steps and prompts around the Qloo-chosen items.
+
+**With vs without Qloo** (`/api/compare-ai`): asks Gemini for picks with no Qloo access, then checks every one against Qloo (`/search`) for existence and era. The plan page shows the score side by side.
+
+Without a key everything still works, with template wording and no AI steps.
+
 ## Run it locally
 
 Requires Node 18.18+ (tested on Node 22) and npm.
