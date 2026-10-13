@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Memory Lane for AI agents (MCP)" };
 
-const URL = "https://memory-lane-azure-six.vercel.app/api/mcp";
+const URL = "https://memory-lane-nemotron-nebius.vercel.app/api/mcp";
 
 export default function Agents() {
   return (

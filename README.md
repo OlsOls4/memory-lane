@@ -88,13 +88,13 @@ app always works with no LLM at all.
 
 ## Use it from any AI agent (MCP)
 
-Memory Lane is also a remote MCP server at `https://memory-lane-azure-six.vercel.app/api/mcp` (Streamable HTTP, stateless, no sign-in). Tools:
+Memory Lane is also a remote MCP server at `https://memory-lane-nemotron-nebius.vercel.app/api/mcp` (Streamable HTTP, stateless, no sign-in). Tools:
 
 - `plan_reminiscence_week`: a 7-day plan for one resident (born, loved, optional hometown and care flags).
 - `plan_group_session`: a 45-minute session for 2 to 6 residents, using Qloo compare.
 - `reminiscence_years`: the years someone is most likely to remember (no Qloo call).
 
-Add it in Claude (Settings → Connectors → Add custom connector) or any MCP client with `{"mcpServers":{"memory-lane":{"url":"https://memory-lane-azure-six.vercel.app/api/mcp"}}}`. See `/agents` in the app.
+Add it in Claude (Settings → Connectors → Add custom connector) or any MCP client with `{"mcpServers":{"memory-lane":{"url":"https://memory-lane-nemotron-nebius.vercel.app/api/mcp"}}}`. See `/agents` in the app.
 
 ## NVIDIA Nemotron on Nebius Token Factory (`nebius-nemotron` branch)
 

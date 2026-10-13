@@ -91,7 +91,7 @@ function planText(p: WeekPlan): string {
   }
   if (p.flagged.length) lines.push("", `Left out: ${p.flagged.slice(0, 6).map((f) => `${f.name} (${f.reason})`).join("; ")}`);
   if (p.warnings.length) lines.push("", `Notes: ${p.warnings.join(" ")}`);
-  lines.push("", "Open the full printable plan at https://memory-lane-azure-six.vercel.app");
+  lines.push("", "Open the full printable plan at https://memory-lane-nemotron-nebius.vercel.app");
   return lines.join("\n");
 }
 
