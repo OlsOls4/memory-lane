@@ -100,7 +100,7 @@ export default function AgentProgress({
           </li>
         ))}
       </ol>
-      <p className="muted small agent-foot">Usually 10 to 20 seconds. Every step stays visible afterwards under “How Memory Lane chose this”.</p>
+      <p className="muted small agent-foot">Usually 15 to 40 seconds. Every step stays visible afterwards under “How Memory Lane chose this”.</p>
     </section>
   );
 }

@@ -122,14 +122,14 @@ export interface QuickInput {
 export const STORY_SAMPLE: QuickInput = {
   firstName: "Jean",
   born: "1941",
-  place: "Leeds",
+  place: "Leeds, UK",
   loved: "",
   story:
     "Trained as a nurse at Leeds General Infirmary. Danced every Saturday night at the Mecca ballroom and adored Dusty Springfield. Loved Saturday-night variety shows on the telly and fish and chips by the sea at Scarborough. Needs soft foods now and is hard of hearing.",
 };
 
 export const QUICK_SAMPLES: QuickInput[] = [
-  { firstName: "Margaret", born: "1940s", place: "Liverpool", loved: "Cilla Black" },
+  { firstName: "Margaret", born: "1940s", place: "Liverpool, UK", loved: "Cilla Black" },
   { firstName: "Walter", born: "1938", place: "Chicago, USA", loved: "Frank Sinatra" },
-  { firstName: "Dorothy", born: "age 82", place: "Glasgow", loved: "afternoon tea" },
+  { firstName: "Dorothy", born: "age 82", place: "Glasgow, UK", loved: "afternoon tea" },
 ];

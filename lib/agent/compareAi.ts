@@ -41,7 +41,12 @@ export async function compareWithAiOnly(profile: ResidentProfile, onStep?: StepL
       const types = p.domain === "travel" ? [TYPES.travel, "urn:entity:place"] : [TYPES[p.domain]];
       const res = await svc.search(local, types, `Check the AI-only pick "${p.name}" exists in Qloo`, 3);
       const want = norm(p.name);
-      const hit = res.find((e) => norm(e.name) === want) || res.find((e) => norm(e.name).includes(want) || want.includes(norm(e.name)));
+      const matches = res.filter((e) => norm(e.name) === want);
+      const loose = res.filter((e) => norm(e.name).includes(want) || want.includes(norm(e.name)));
+      const pool = matches.length ? matches : loose;
+      // Same title, several entities (remakes, reboots): prefer the one dated nearest the AI's year or their era.
+      const target = p.year || Math.round((era.formativeStart + era.formativeEnd) / 2);
+      const hit = [...pool].sort((a, b) => Math.abs((a.year ?? target) - target) - Math.abs((b.year ?? target) - target))[0];
       if (!hit) return { ...p, status: "not-found", note: p.domain === "food" ? "Couldn't be matched to a real place in Qloo" : "Couldn't be matched in Qloo's graph" };
       if ((p.domain === "film" || p.domain === "tv") && hit.year && (hit.year < lo || hit.year > hi))
         return { ...p, status: "wrong-era", qlooName: hit.name, note: `Qloo dates it ${hit.year}, outside ${era.formativeStart}–${era.formativeEnd}` };
