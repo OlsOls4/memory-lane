@@ -45,8 +45,35 @@ const CHAINS: Record<NemotronRole, string[]> = {
 
 export const BASE_URL = () => (process.env.NEBIUS_BASE_URL || "https://api.tokenfactory.nebius.com/v1").replace(/\/$/, "");
 
+// Backup provider: the same Nemotron family on NVIDIA's API Catalog (build.nvidia.com), used only when
+// every Token Factory model in a role's chain fails (e.g. HTTP 402 out of credit). Token Factory stays primary.
+export const NVIDIA_BASE_URL = () => (process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/$/, "");
+const NVIDIA_MODEL: Record<string, string> = {
+  [MODELS.ultra]: "nvidia/nemotron-3-ultra-550b-a55b",
+  [MODELS.super]: "nvidia/nemotron-3-ultra-550b-a55b",
+  [MODELS.nano]: "nvidia/nemotron-3.5-lightning-30b-a3b",
+  [MODELS.lightning]: "nvidia/nemotron-3.5-lightning-30b-a3b",
+};
+/** Set once Token Factory answers 402/401 on this instance, so later calls skip straight to the backup. */
+let tokenFactoryDown = false;
+
 export function nemotronEnabled() {
-  return !!process.env.NEBIUS_API_KEY && !/^(off|0|false)$/i.test(process.env.NEMOTRON || "");
+  return (!!process.env.NEBIUS_API_KEY || !!process.env.NVIDIA_API_KEY) && !/^(off|0|false)$/i.test(process.env.NEMOTRON || "");
+}
+
+type Target = { provider: "nebius" | "nvidia"; base: string; key: string; model: string };
+function targetsFor(models: string[]): Target[] {
+  const out: Target[] = [];
+  const nb = process.env.NEBIUS_API_KEY, nv = process.env.NVIDIA_API_KEY;
+  if (nb && !tokenFactoryDown) for (const m of models) out.push({ provider: "nebius", base: BASE_URL(), key: nb, model: m });
+  if (nv) {
+    const seen = new Set<string>();
+    for (const m of models) {
+      const mm = NVIDIA_MODEL[m] || (m.startsWith("nvidia/nemotron") ? m : "");
+      if (mm && !seen.has(mm)) { seen.add(mm); out.push({ provider: "nvidia", base: NVIDIA_BASE_URL(), key: nv, model: mm }); }
+    }
+  }
+  return out;
 }
 
 export function modelsFor(role: NemotronRole): string[] {
@@ -103,6 +130,8 @@ export interface ChatResult {
   finishReason?: string;
   /** Models that failed before this one answered, with why. */
   fellBackFrom: string[];
+  /** Which host answered: Nebius Token Factory (primary) or NVIDIA API Catalog (backup). */
+  provider?: "nebius" | "nvidia";
 }
 
 /** Rolling per-model latency log for /api/status (in-memory, per server instance). */
@@ -116,12 +145,14 @@ function log(role: NemotronRole, model: string, ms: number, ok: boolean) {
 
 /** One chat completion for a role, walking its model chain on failure. Returns null if every model failed. */
 export async function chat(role: NemotronRole, o: ChatOptions): Promise<ChatResult | null> {
-  const key = process.env.NEBIUS_API_KEY;
-  if (!key || !nemotronEnabled()) return null;
-  const models = o.only ? [o.only] : modelsFor(role);
+  if (!nemotronEnabled()) return null;
+  const targets = targetsFor(o.only ? [o.only] : modelsFor(role));
+  const models = targets.map((t) => t.model);
   const deadline = Date.now() + (o.timeoutMs ?? 30000);
   const failed: string[] = [];
-  for (const [i, model] of models.entries()) {
+  for (const [i, t] of targets.entries()) {
+    const model = t.model;
+    const key = t.key;
     // Keep a little of the budget for the fallback model.
     const left = deadline - Date.now();
     if (left < 1500) break;
@@ -140,7 +171,7 @@ export async function chat(role: NemotronRole, o: ChatOptions): Promise<ChatResu
         body.tool_choice = "auto";
       }
       if (o.json && !o.tools?.length) body.response_format = { type: "json_object" };
-      const res = await fetch(`${BASE_URL()}/chat/completions`, {
+      const res = await fetch(`${t.base}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
         body: JSON.stringify(body),
@@ -152,6 +183,7 @@ export async function chat(role: NemotronRole, o: ChatOptions): Promise<ChatResu
         const text = (await res.text()).slice(0, 200);
         lastNemotronError = `${model}: HTTP ${res.status}: ${text}`;
         failed.push(`${shortModel(model)} (HTTP ${res.status})`);
+        if (t.provider === "nebius" && (res.status === 402 || res.status === 401)) tokenFactoryDown = true;
         log(role, model, ms, false);
         continue;
       }
@@ -177,6 +209,7 @@ export async function chat(role: NemotronRole, o: ChatOptions): Promise<ChatResu
         reasoningTokens: out?.usage?.completion_tokens_details?.reasoning_tokens ?? undefined,
         finishReason: choice?.finish_reason,
         fellBackFrom: failed,
+        provider: t.provider,
       };
     } catch (e: any) {
       const ms = Date.now() - started;
